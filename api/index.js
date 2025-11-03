@@ -1,345 +1,256 @@
 const express = require('express');
 const cors = require('cors');
-
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Helper function to count words
+// ---------- Utility helpers ----------
+const SENTENCE_SPLIT = /(?<=[.!?])\s+(?=[A-Z0-9])/g; // simple sentence boundary
+const WORD_SPLIT = /[\s]+/g;
+const ALPHA_WORD = /[A-Za-z]/;
+
+function tokenizeSentences(text) {
+  return text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(SENTENCE_SPLIT)
+    .filter(s => s.trim().length > 0);
+}
+
+function tokenizeWords(text) {
+  return text
+    .replace(/[()\[\]{}.,!?;:"'`]/g, ' ')
+    .split(WORD_SPLIT)
+    .filter(w => w && ALPHA_WORD.test(w));
+}
+
 function countWords(text) {
-  return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  return tokenizeWords(text).length;
 }
 
-// Helper function to count sentences
 function countSentences(text) {
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  return sentences.length;
+  return tokenizeSentences(text).length;
 }
 
-// Helper function to calculate average word length
-function averageWordLength(text) {
-  const words = text.trim().split(/\s+/).filter(word => word.length > 0);
-  if (words.length === 0) return 0;
-  const totalLength = words.reduce((sum, word) => sum + word.length, 0);
-  return totalLength / words.length;
-}
-
-// Helper function to count paragraphs
 function countParagraphs(text) {
   return text.split(/\n\n+/).filter(p => p.trim().length > 0).length;
 }
 
-// Helper function to detect complex vocabulary (words > 7 characters)
+function averageWordLength(text) {
+  const words = tokenizeWords(text);
+  if (!words.length) return 0;
+  const total = words.reduce((s, w) => s + w.length, 0);
+  return total / words.length;
+}
+
 function countComplexWords(text) {
-  const words = text.trim().split(/\s+/).filter(word => word.length > 0);
-  return words.filter(word => word.length > 7).length;
+  return tokenizeWords(text).filter(w => w.length >= 7).length;
 }
 
-// Helper function to detect linking words
-function countLinkingWords(text) {
-  const linkingWords = [
-    'however', 'therefore', 'moreover', 'furthermore', 'nevertheless',
-    'consequently', 'additionally', 'alternatively', 'similarly',
-    'in contrast', 'on the other hand', 'in addition', 'for example',
-    'for instance', 'in conclusion', 'to sum up', 'firstly', 'secondly',
-    'finally', 'although', 'despite', 'whereas', 'while'
-  ];
-  const lowerText = text.toLowerCase();
-  return linkingWords.filter(word => lowerText.includes(word)).length;
+// ---------- Grammar & style diagnostics ----------
+// Detect likely fragments: sentences lacking finite verb or too short
+const FINITE_VERB = /\b(am|is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|may|might|must|shall|should|will|would|'m|'re|'s)\b/i;
+function detectFragments(sentences) {
+  return sentences
+    .map((s, idx) => ({ s: s.trim(), idx }))
+    .filter(({ s }) => s.split(WORD_SPLIT).filter(Boolean).length < 5 || !FINITE_VERB.test(s))
+    .map(({ s, idx }) => ({ index: idx, text: s }));
 }
 
-// Helper function to check grammar patterns (basic checks)
-function checkGrammarPatterns(text) {
-  const issues = [];
-  
-  // Check for repeated words
-  const repeatedWords = text.match(/(\b\w+\b)\s+\1/gi);
-  if (repeatedWords && repeatedWords.length > 0) {
-    issues.push(`Repeated words detected: ${repeatedWords.length} instances`);
-  }
-  
-  // Check for sentence starting with lowercase
-  const lowercaseStarts = text.match(/[.!?]\s+[a-z]/g);
-  if (lowercaseStarts && lowercaseStarts.length > 0) {
-    issues.push(`Sentences starting with lowercase: ${lowercaseStarts.length}`);
-  }
-  
-  // Check for missing spaces after punctuation
-  const missingSpaces = text.match(/[,;:][A-Za-z]/g);
-  if (missingSpaces && missingSpaces.length > 0) {
-    issues.push(`Missing spaces after punctuation: ${missingSpaces.length}`);
-  }
-  
-  return issues;
+// Detect likely run-ons: multiple independent clauses joined by comma/no conjunction
+const COORD_CONJ = /\b(and|but|or|nor|for|yet|so)\b/i;
+function detectRunOns(sentences) {
+  return sentences
+    .map((s, idx) => ({ s: s.trim(), idx }))
+    .filter(({ s }) => {
+      const clauseLike = s.split(/[,;:]/).map(x => x.trim()).filter(Boolean);
+      const manyClauses = clauseLike.length >= 3;
+      const commaSpliceTwo = clauseLike.length === 2 && !/\b(and|but|or|so|yet)\b/i.test(s);
+      const veryLong = s.split(WORD_SPLIT).length > 35 && /,/.test(s) && !COORD_CONJ.test(s);
+      return manyClauses || commaSpliceTwo || veryLong;
+    })
+    .map(({ s, idx }) => ({ index: idx, text: s }));
 }
 
-// Scoring logic
-function calculateScores(essay, taskType) {
-  const wordCount = countWords(essay);
-  const sentenceCount = countSentences(essay);
-  const paragraphCount = countParagraphs(essay);
-  const avgWordLength = averageWordLength(essay);
-  const complexWordCount = countComplexWords(essay);
-  const linkingWordCount = countLinkingWords(essay);
-  const grammarIssues = checkGrammarPatterns(essay);
-  
-  // Word count requirements (Task 1: 150+, Task 2: 250+)
-  const minWords = taskType === 'task1' ? 150 : 250;
-  const idealWords = taskType === 'task1' ? 200 : 300;
-  
-  let taskAchievementScore = 5.0;
-  let coherenceScore = 5.0;
-  let lexicalScore = 5.0;
-  let grammarScore = 5.0;
-  
-  // Task Achievement scoring
-  if (wordCount >= idealWords) {
-    taskAchievementScore = 7.0;
-  } else if (wordCount >= minWords) {
-    taskAchievementScore = 6.0;
-  } else if (wordCount >= minWords * 0.8) {
-    taskAchievementScore = 5.5;
-  } else {
-    taskAchievementScore = 5.0;
-  }
-  
-  // Coherence and Cohesion scoring
-  if (paragraphCount >= 4 && linkingWordCount >= 5) {
-    coherenceScore = 7.0;
-  } else if (paragraphCount >= 3 && linkingWordCount >= 3) {
-    coherenceScore = 6.5;
-  } else if (paragraphCount >= 2 && linkingWordCount >= 2) {
-    coherenceScore = 6.0;
-  } else {
-    coherenceScore = 5.5;
-  }
-  
-  // Lexical Resource scoring
-  const complexWordRatio = complexWordCount / wordCount;
-  if (complexWordRatio > 0.3 && avgWordLength > 5) {
-    lexicalScore = 7.0;
-  } else if (complexWordRatio > 0.2 && avgWordLength > 4.5) {
-    lexicalScore = 6.5;
-  } else if (complexWordRatio > 0.15) {
-    lexicalScore = 6.0;
-  } else {
-    lexicalScore = 5.5;
-  }
-  
-  // Grammar scoring (penalize for issues)
-  if (grammarIssues.length === 0 && sentenceCount > 10) {
-    grammarScore = 7.0;
-  } else if (grammarIssues.length <= 2 && sentenceCount > 8) {
-    grammarScore = 6.5;
-  } else if (grammarIssues.length <= 4) {
-    grammarScore = 6.0;
-  } else {
-    grammarScore = 5.5;
-  }
-  
-  // Calculate overall band score (average of all components)
-  const overallScore = ((taskAchievementScore + coherenceScore + lexicalScore + grammarScore) / 4).toFixed(1);
-  
+// Passive voice heuristic: form of be + past participle (verb-ed or irregular common list)
+const IRREG_PP = /(written|taken|given|seen|known|made|done|built|bought|thought|found|kept|left|felt|heard|held|led|lost|put|read|said|sent|set|spent|told|understood|won)\b/i;
+function detectPassiveSentences(sentences) {
+  return sentences
+    .map((s, idx) => ({ s: s.trim(), idx }))
+    .filter(({ s }) => /\b(am|is|are|was|were|be|been|being)\b\s+(\w+ed\b|\w+en\b|\w+n\b|${IRREG_PP.source})/i.test(s))
+    .map(({ s, idx }) => ({ index: idx, text: s }));
+}
+
+function detectActiveSentences(sentences) {
+  // active heuristic: subject pronoun/noun + lexical verb without be-aux
+  return sentences
+    .map((s, idx) => ({ s: s.trim(), idx }))
+    .filter(({ s }) => /\b(I|We|You|They|He|She|People|Students|Government|Researchers|It)\b[^.?!]*\b(\w{3,})(?!\s*(been|being|be|am|is|are|was|were))\b/i.test(s))
+    .map(({ s, idx }) => ({ index: idx, text: s }));
+}
+
+// Lexical sophistication: rare/academic word hints and phrase variety
+const ACADEMIC_WORDS = [
+  'moreover','however','nevertheless','consequently','furthermore','whereas','thus','therefore','significantly','predominantly','notwithstanding','albeit','paradigm','mitigate','underpin','alleviate','substantiate','robust','salient','ubiquitous','inadvertent'
+];
+function analyzeVocabulary(text) {
+  const words = tokenizeWords(text).map(w => w.toLowerCase());
+  const types = new Set(words);
+  const typeTokenRatio = words.length ? types.size / words.length : 0;
+  const academic = words.filter(w => ACADEMIC_WORDS.includes(w));
+  const collocations = (text.match(/\b(play an important role|as a result|in addition to|on the other hand|in contrast|a wide range of)\b/gi) || []).length;
+  return { typeTokenRatio, academicCount: academic.length, collocations };
+}
+
+// ---------- Scoring model (IELTS-like) ----------
+// Four criteria: Task Response (TR), Coherence & Cohesion (CC), Lexical Resource (LR), Grammatical Range & Accuracy (GRA)
+// Return finer steps: .0, .25, .5, .75
+function toQuarterBand(score) {
+  return Math.round(score * 4) / 4; // to nearest 0.25
+}
+
+function scoreEssay(text) {
+  const words = tokenizeWords(text);
+  const sentences = tokenizeSentences(text);
+  const paragraphs = text.split(/\n\n+/).filter(p => p.trim()).length;
+
+  const wordCount = words.length;
+  const sentenceCount = sentences.length;
+  const avgSentenceLen = sentenceCount ? wordCount / sentenceCount : 0;
+  const complexWordCount = words.filter(w => w.length >= 7).length;
+
+  const fragments = detectFragments(sentences);
+  const runOns = detectRunOns(sentences);
+  const passive = detectPassiveSentences(sentences);
+  const active = detectActiveSentences(sentences);
+  const vocab = analyzeVocabulary(text);
+
+  // Heuristic TR: penalize if too short (<240 words), reward if 250-320; light penalty >420
+  let TR = 6.5;
+  if (wordCount < 180) TR = 5.0;
+  else if (wordCount < 240) TR = 6.0;
+  else if (wordCount <= 320) TR = 7.0;
+  else if (wordCount <= 420) TR = 6.75;
+  else TR = 6.5;
+  // Bonus for paragraphing and cohesive devices
+  if (paragraphs >= 4) TR += 0.25;
+
+  // CC: sentence length variation and limited run-ons/fragments
+  let CC = 6.5;
+  const longSentences = sentences.filter(s => s.split(WORD_SPLIT).length > 30).length;
+  const shortSentences = sentences.filter(s => s.split(WORD_SPLIT).length < 6).length;
+  const variation = (longSentences > 0 && shortSentences > 0) ? 1 : 0;
+  CC += variation * 0.5;
+  CC -= Math.min(1.5, (runOns.length * 0.3 + fragments.length * 0.2));
+  if (vocab.collocations >= 3) CC += 0.25;
+
+  // LR: type-token ratio, complex words, academic signals
+  let LR = 6.5;
+  if (vocab.typeTokenRatio > 0.5) LR += 0.5;
+  else if (vocab.typeTokenRatio > 0.4) LR += 0.25;
+  if (complexWordCount / (wordCount || 1) > 0.18) LR += 0.25;
+  LR += Math.min(0.5, vocab.academicCount * 0.1);
+
+  // GRA: fragments/run-ons penalties, passive balance, avg word length
+  let GRA = 6.5;
+  GRA -= Math.min(1.5, fragments.length * 0.2 + runOns.length * 0.3);
+  const passiveRate = sentenceCount ? passive.length / sentenceCount : 0;
+  if (passiveRate > 0.6) GRA -= 0.5; // overuse passive
+  if (passiveRate < 0.15 && active.length > 0) GRA += 0.25; // clear active presence
+  if (averageWordLength(text) >= 4.8) GRA += 0.25;
+
+  // Clamp 0-9 and round to quarter bands
+  TR = toQuarterBand(Math.max(0, Math.min(9, TR)));
+  CC = toQuarterBand(Math.max(0, Math.min(9, CC)));
+  LR = toQuarterBand(Math.max(0, Math.min(9, LR)));
+  GRA = toQuarterBand(Math.max(0, Math.min(9, GRA)));
+
+  const overall = toQuarterBand(Math.round(((TR + CC + LR + GRA) / 4) * 4) / 4);
+
   return {
-    overallBand: parseFloat(overallScore),
-    taskAchievement: taskAchievementScore,
-    coherenceCohesion: coherenceScore,
-    lexicalResource: lexicalScore,
-    grammaticalRange: grammarScore,
-    wordCount,
-    sentenceCount,
-    paragraphCount,
-    complexWordCount,
-    linkingWordCount,
-    grammarIssues
+    counts: { words: wordCount, sentences: sentenceCount, paragraphs },
+    features: {
+      avgSentenceLen,
+      complexWordCount,
+      fragments,
+      runOns,
+      passive,
+      active,
+      vocab,
+      avgWordLen: averageWordLength(text)
+    },
+    scores: { TR, CC, LR, GRA, overall }
   };
 }
 
-// Generate feedback based on scores
-function generateFeedback(scores, taskType) {
-  const strengths = [];
-  const weaknesses = [];
-  const suggestions = [];
-  
-  // Word count feedback
-  const minWords = taskType === 'task1' ? 150 : 250;
-  if (scores.wordCount >= minWords) {
-    strengths.push(`Good word count: ${scores.wordCount} words`);
-  } else {
-    weaknesses.push(`Insufficient word count: ${scores.wordCount} words (minimum: ${minWords})`);
-    suggestions.push('Expand your ideas with more details and examples');
+// ---------- Feedback generation ----------
+function examplesForIssue(key) {
+  switch (key) {
+    case 'runOns':
+      return [
+        'Original: I love reading, it makes me calm. -> Fix: I love reading because it makes me calm.',
+        'Original: The city expanded rapidly, the infrastructure could not cope. -> Fix: The city expanded rapidly, but the infrastructure could not cope.'
+      ];
+    case 'fragments':
+      return [
+        'Fragment: Because technology is advancing. -> Fix: Because technology is advancing, many jobs are being automated.',
+        'Fragment: Such as pollution and traffic. -> Fix: The negative effects include pollution and traffic.'
+      ];
+    case 'passive':
+      return [
+        'Passive: The policy was implemented by the council. -> Active: The council implemented the policy.',
+        'Passive: Mistakes were made. -> Active: We made mistakes.'
+      ];
+    case 'lexical':
+      return [
+        'Upgrade: good -> beneficial/constructive; bad -> detrimental/adverse',
+        'Cohesion: on the other hand, in contrast, as a result, furthermore'
+      ];
+    default:
+      return [];
   }
-  
-  // Paragraph structure feedback
-  if (scores.paragraphCount >= 4) {
-    strengths.push('Well-organized paragraph structure');
-  } else {
-    weaknesses.push(`Limited paragraph structure: ${scores.paragraphCount} paragraphs`);
-    suggestions.push('Organize your essay into clear paragraphs (introduction, body paragraphs, conclusion)');
-  }
-  
-  // Linking words feedback
-  if (scores.linkingWordCount >= 5) {
-    strengths.push('Good use of cohesive devices and linking words');
-  } else {
-    weaknesses.push('Limited use of linking words');
-    suggestions.push('Use more transitional phrases (however, therefore, in addition, etc.)');
-  }
-  
-  // Vocabulary feedback
-  if (scores.complexWordCount >= 20) {
-    strengths.push('Good range of vocabulary with complex words');
-  } else {
-    weaknesses.push('Limited vocabulary range');
-    suggestions.push('Incorporate more sophisticated vocabulary to demonstrate lexical resource');
-  }
-  
-  // Grammar feedback
-  if (scores.grammarIssues.length === 0) {
-    strengths.push('No obvious grammar or punctuation errors detected');
-  } else {
-    weaknesses.push('Grammar and punctuation issues detected');
-    suggestions.push('Review your work for repeated words, capitalization, and punctuation');
-  }
-  
-  // Sentence variety feedback
-  const avgWordsPerSentence = scores.wordCount / scores.sentenceCount;
-  if (avgWordsPerSentence >= 15 && avgWordsPerSentence <= 25) {
-    strengths.push('Good sentence length variety');
-  } else if (avgWordsPerSentence < 15) {
-    weaknesses.push('Sentences are too short on average');
-    suggestions.push('Combine simple sentences into more complex structures');
-  } else {
-    weaknesses.push('Sentences are too long on average');
-    suggestions.push('Break down long sentences for better clarity');
-  }
-  
-  return { strengths, weaknesses, suggestions };
 }
 
-// Main evaluation endpoint
+function buildFeedback(text) {
+  const sentences = tokenizeSentences(text);
+  const analysis = scoreEssay(text);
+  const fb = [];
+
+  if (analysis.counts.words < 240)
+    fb.push('Aim for at least 250 words; add one supporting example in a body paragraph.');
+  if (analysis.features.runOns.length)
+    fb.push(`Fix run-on sentences (e.g., in sentences: ${analysis.features.runOns.map(r => r.index + 1).slice(0, 3).join(', ')}). Try subordinators like "because/although" or use a period.`);
+  if (analysis.features.fragments.length)
+    fb.push(`Complete sentence fragments (e.g., sentences: ${analysis.features.fragments.map(r => r.index + 1).slice(0, 3).join(', ')}). Ensure each sentence has a subject and a finite verb.`);
+
+  const passiveRate = analysis.counts.sentences ? analysis.features.passive.length / analysis.counts.sentences : 0;
+  if (passiveRate > 0.5)
+    fb.push('Reduce heavy passive voice. Prefer clear agents: "The government should invest..."');
+  if (analysis.features.vocab.typeTokenRatio < 0.42)
+    fb.push('Increase lexical variety: replace repeated words and add precise synonyms.');
+  if (analysis.features.vocab.collocations < 2)
+    fb.push('Add cohesive phrases: "as a result", "on the other hand", "in contrast".');
+
+  // Attach actionable examples
+  if (analysis.features.runOns.length) fb.push(...examplesForIssue('runOns'));
+  if (analysis.features.fragments.length) fb.push(...examplesForIssue('fragments'));
+  if (passiveRate > 0.5) fb.push(...examplesForIssue('passive'));
+  fb.push(...examplesForIssue('lexical'));
+
+  return fb.slice(0, 10);
+}
+
+// ---------- API ----------
 app.post('/evaluate', (req, res) => {
-  try {
-    const { essay, taskType } = req.body;
-    
-    // Validate input
-    if (!essay || typeof essay !== 'string') {
-      return res.status(400).json({
-        error: 'Essay text is required and must be a string'
-      });
-    }
-    
-    if (!taskType || !['task1', 'task2'].includes(taskType)) {
-      return res.status(400).json({
-        error: 'Task type is required and must be either "task1" or "task2"'
-      });
-    }
-    
-    // Calculate scores
-    const scores = calculateScores(essay, taskType);
-    
-    // Generate feedback
-    const feedback = generateFeedback(scores, taskType);
-    
-    // Prepare response
-    const response = {
-      success: true,
-      taskType,
-      bandScores: {
-        overall: scores.overallBand,
-        taskAchievement: scores.taskAchievement,
-        coherenceCohesion: scores.coherenceCohesion,
-        lexicalResource: scores.lexicalResource,
-        grammaticalRangeAccuracy: scores.grammaticalRange
-      },
-      statistics: {
-        wordCount: scores.wordCount,
-        sentenceCount: scores.sentenceCount,
-        paragraphCount: scores.paragraphCount,
-        complexWords: scores.complexWordCount,
-        linkingWords: scores.linkingWordCount,
-        averageWordsPerSentence: (scores.wordCount / scores.sentenceCount).toFixed(1)
-      },
-      feedback: {
-        strengths: feedback.strengths,
-        weaknesses: feedback.weaknesses,
-        suggestions: feedback.suggestions
-      },
-      grammarIssues: scores.grammarIssues
-    };
-    
-    res.json(response);
-    
-  } catch (error) {
-    console.error('Error evaluating essay:', error);
-    res.status(500).json({
-      error: 'An error occurred while evaluating the essay',
-      message: error.message
-    });
-  }
+  const { essay = '' } = req.body || {};
+  const text = String(essay || '').replace(/\r/g, '\n');
+  const result = scoreEssay(text);
+  const feedback = buildFeedback(text);
+  res.json({ ...result, feedback });
 });
 
-// Health check endpoint
-app.get('/', (req, res) => {
-  res.json({
-    message: 'IELTS Writing Evaluator API',
-    version: '1.0.0',
-    endpoints: {
-      evaluate: 'POST /evaluate'
-    },
-    sampleRequest: {
-      essay: 'Your essay text here...',
-      taskType: 'task1 or task2'
-    }
-  });
-});
-
-// Example response for documentation
-app.get('/sample-response', (req, res) => {
-  res.json({
-    success: true,
-    taskType: 'task2',
-    bandScores: {
-      overall: 6.5,
-      taskAchievement: 6.5,
-      coherenceCohesion: 7.0,
-      lexicalResource: 6.5,
-      grammaticalRangeAccuracy: 6.0
-    },
-    statistics: {
-      wordCount: 287,
-      sentenceCount: 15,
-      paragraphCount: 4,
-      complexWords: 45,
-      linkingWords: 8,
-      averageWordsPerSentence: '19.1'
-    },
-    feedback: {
-      strengths: [
-        'Good word count: 287 words',
-        'Well-organized paragraph structure',
-        'Good use of cohesive devices and linking words',
-        'Good range of vocabulary with complex words'
-      ],
-      weaknesses: [
-        'Some grammar and punctuation issues detected'
-      ],
-      suggestions: [
-        'Review your work for repeated words, capitalization, and punctuation'
-      ]
-    },
-    grammarIssues: [
-      'Repeated words detected: 2 instances'
-    ]
-  });
-});
-
-const PORT = process.env.PORT || 3001;
-
-app.listen(PORT, () => {
-  console.log(`IELTS Writing Evaluator API running on port ${PORT}`);
-});
+app.get('/health', (_, res) => res.json({ ok: true }));
 
 module.exports = app;
