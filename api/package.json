@@ -1,0 +1,30 @@
+{
+  "name": "ielts-writing-evaluator-api",
+  "version": "1.0.0",
+  "description": "Free, open-source IELTS writing evaluation API with logic-based scoring",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "ielts",
+    "writing",
+    "evaluation",
+    "scoring",
+    "essay",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
