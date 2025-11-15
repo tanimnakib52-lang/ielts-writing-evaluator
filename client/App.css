@@ -241,4 +241,176 @@ body {
   .scores-grid {
     grid-template-columns: 1fr;
   }
+
+  /* ========== AI Results Styling ========== */
+.ai-results-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 2rem;
+  margin-top: 2rem;
+  color: white;
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.ai-results-section h2 {
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.ai-band-scores {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.overall-band {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.overall-band h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.9;
+}
+
+.band-number {
+  font-size: 4rem;
+  font-weight: 700;
+  color: #ffd700;
+  text-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.criteria-scores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.score-item {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1rem;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: transform 0.2s;
+}
+
+.score-item:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.score-label {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.score-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffd700;
+}
+
+.ai-feedback {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.feedback-section {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 1.5rem;
+  backdrop-filter: blur(5px);
+}
+
+.feedback-section h3 {
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.feedback-section.strengths {
+  border-left: 4px solid #4ade80;
+}
+
+.feedback-section.weaknesses {
+  border-left: 4px solid #fbbf24;
+}
+
+.feedback-section.suggestions {
+  border-left: 4px solid #60a5fa;
+}
+
+.feedback-section ul {
+  list-style: none;
+  padding: 0;
+}
+
+.feedback-section li {
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  line-height: 1.6;
+  transition: background 0.2s;
+}
+
+.feedback-section li:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* OCR Button Styling */
+.ocr-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  margin-top: 0.5rem;
+}
+
+.ocr-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.ocr-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* AI Toggle Checkbox */
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  cursor: pointer;
+}
+
+input[type="file"] {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  width: 100%;
+  border: 2px dashed #667eea;
+  border-radius: 8px;
+  background: rgba(102, 126, 234, 0.05);
+}
 }
