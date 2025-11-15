@@ -192,7 +192,13 @@ function scoreEssay(text) {
       vocab,
       avgWordLen: averageWordLength(text)
     },
-    scores: { TR, CC, LR, GRA, overall }
+    bandScores: {
+      taskAchievement: TR,
+      coherenceCohesion: CC,
+      lexicalResource: LR,
+      grammaticalRange: GRA,
+      overall: { overall
+    }
   };
 }
 
@@ -304,7 +310,7 @@ app.post('/ai-evaluate', async (req, res) => {
       return res.status(400).json({ error: 'Essay text is required' });
     }
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!) {
       return res.status(500).json({ error: 'OpenAI API key not configured' });
     }
 
