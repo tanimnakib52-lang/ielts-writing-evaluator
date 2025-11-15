@@ -1,6 +1,18 @@
 const express = require('express');
 const cors = require('cors');
 const app = express();
+const multer = require('multer');
+const Tesseract = require('tesseract.js');
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config();
+
+// For AI scoring (OpenAI)
+const OpenAI = require('openai');
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Multer upload configuration
+const upload = multer({ dest: path.join(__dirname, 'uploads') });
 
 // Middleware
 app.use(cors());
@@ -252,5 +264,99 @@ app.post('/evaluate', (req, res) => {
 });
 
 app.get('/health', (_, res) => res.json({ ok: true }));
+
+// ========== OCR Endpoint ==========
+app.post('/ocr-evaluate', upload.single('essayImage'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const imagePath = req.file.path;
+
+    // Run OCR
+    const result = await Tesseract.recognize(imagePath, 'eng', {
+      logger: m => console.log(m)
+    });
+
+    // Clean up uploaded file
+    fs.unlink(imagePath, () => {});
+
+    return res.json({
+      success: true,
+      text: result.data.text
+    });
+  } catch (err) {
+    console.error('OCR error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to run OCR on image',
+      message: err.message
+    });
+  }
+});
+
+// ========== AI-Based Scoring Endpoint ==========
+app.post('/ai-evaluate', async (req, res) => {
+  try {
+    const { essay, taskType } = req.body;
+
+    if (!essay || typeof essay !== 'string') {
+      return res.status(400).json({ error: 'Essay text is required' });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OpenAI API key not configured' });
+    }
+
+    const prompt = `You are an official IELTS writing examiner.
+Evaluate the following IELTS ${taskType === 'task1' ? 'Task 1' : 'Task 2'} essay.
+
+Give:
+1) Band scores (1-9) for:
+   - Task Achievement/Response
+   - Coherence and Cohesion
+   - Lexical Resource
+   - Grammatical Range and Accuracy
+2) An overall band (1-9)
+3) A short list of strengths
+4) A short list of weaknesses
+5) Actionable suggestions.
+
+Return JSON only in this format:
+
+{
+  "bands": {
+    "taskAchievement": number,
+    "coherenceCohesion": number,
+    "lexicalResource": number,
+    "grammaticalRangeAccuracy": number,
+    "overall": number
+  },
+  "strengths": [string],
+  "weaknesses": [string],
+  "suggestions": [string]
+}
+
+Essay:
+"${essay}"`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' }
+    });
+
+    const json = JSON.parse(completion.choices[0].message.content);
+    return res.json({ success: true, ...json });
+  } catch (err) {
+    console.error('AI evaluate error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'AI evaluation failed',
+      message: err.message
+    });
+  }
+});
 
 module.exports = app;
