@@ -22,8 +22,18 @@ function App() {
     setLoading(true);
     setError(null);
     setResults(null);
+        setAiResult(null); // Clear previous AI result
 
-    try {
+    
+    // Check if AI scoring is enabled
+    if (useAi) {
+      await handleAiEvaluate();
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise use normal evaluation
+try {
       const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: {
@@ -266,6 +276,74 @@ function App() {
         )}
       </div>
     </div>
+
+      {/* AI Results Section */}
+      {aiResult && (
+        <div className="ai-results-section">
+          <h2>🤖 AI-Powered Evaluation Results</h2>
+          
+          <div className="ai-band-scores">
+            <div className="overall-band">
+              <h3>Overall Band Score</h3>
+              <div className="band-number">{aiResult.bands?.overall || 'N/A'}</div>
+            </div>
+            
+            <div className="criteria-scores">
+              <div className="score-item">
+                <span className="score-label">Task Achievement:</span>
+                <span className="score-value">{aiResult.bands?.taskAchievement || 'N/A'}</span>
+              </div>
+              <div className="score-item">
+                <span className="score-label">Coherence & Cohesion:</span>
+                <span className="score-value">{aiResult.bands?.coherenceCohesion || 'N/A'}</span>
+              </div>
+              <div className="score-item">
+                <span className="score-label">Lexical Resource:</span>
+                <span className="score-value">{aiResult.bands?.lexicalResource || 'N/A'}</span>
+              </div>
+              <div className="score-item">
+                <span className="score-label">Grammatical Range & Accuracy:</span>
+                <span className="score-value">{aiResult.bands?.grammaticalRangeAccuracy || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="ai-feedback">
+            {aiResult.strengths && aiResult.strengths.length > 0 && (
+              <div className="feedback-section strengths">
+                <h3>✅ Strengths</h3>
+                <ul>
+                  {aiResult.strengths.map((strength, index) => (
+                    <li key={index}>{strength}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {aiResult.weaknesses && aiResult.weaknesses.length > 0 && (
+              <div className="feedback-section weaknesses">
+                <h3>⚠️ Areas for Improvement</h3>
+                <ul>
+                  {aiResult.weaknesses.map((weakness, index) => (
+                    <li key={index}>{weakness}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {aiResult.suggestions && aiResult.suggestions.length > 0 && (
+              <div className="feedback-section suggestions">
+                <h3>💡 Suggestions</h3>
+                <ul>
+                  {aiResult.suggestions.map((suggestion, index) => (
+                    <li key={index}>{suggestion}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
   );
 }
 
