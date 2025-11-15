@@ -7,10 +7,9 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
-// For AI scoring (OpenAI)
-const OpenAI = require('openai');
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
+// For AI scoring (Google Generative AI)
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 // Multer upload configuration
 const upload = multer({ dest: path.join(__dirname, 'uploads') });
 
@@ -341,14 +340,12 @@ Return JSON only in this format:
 Essay:
 "${essay}"`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' }
-    });
-
-    const json = JSON.parse(completion.choices[0].message.content);
-    return res.json({ success: true, ...json });
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      const json = JSON.parse(text);return res.json({ success: true, ...json });
   } catch (err) {
     console.error('AI evaluate error:', err);
     return res.status(500).json({
