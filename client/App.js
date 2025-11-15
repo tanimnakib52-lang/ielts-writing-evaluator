@@ -34,7 +34,7 @@ function App() {
 
     // Otherwise use normal evaluation
 try {
-      const response = await fetch('/api/evaluate', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/ai-evaluate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -65,7 +65,7 @@ try {
       const formData = new FormData();
       formData.append('essayImage', imageFile);
 
-      const res = await fetch('http://localhost:3001/ocr-evaluate', {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/ocr-evaluate`, {
         method: 'POST',
         body: formData
       });
@@ -89,7 +89,7 @@ try {
     if (!essay) return;
     setAiLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/ai-evaluate', {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/ai-evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ essay, taskType })
