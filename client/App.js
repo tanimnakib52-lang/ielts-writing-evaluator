@@ -7,6 +7,15 @@ function App() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+    // OCR states
+  const [imageFile, setImageFile] = useState(null);
+  const [ocrText, setOcrText] = useState('');
+  const [ocrLoading, setOcrLoading] = useState(false);
+  
+  // AI scoring states
+  const [useAi, setUseAi] = useState(false);
+  const [aiResult, setAiResult] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,6 +48,57 @@ function App() {
     }
   };
 
+    const handleOcr = async () => {
+    if (!imageFile) return;
+    setOcrLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('essayImage', imageFile);
+
+      const res = await fetch('http://localhost:3001/ocr-evaluate', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setOcrText(data.text);
+        setEssay(data.text);
+      } else {
+        alert(data.error || 'OCR failed');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error calling OCR API');
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const handleAiEvaluate = async () => {
+    if (!essay) return;
+    setAiLoading(true);
+    try {
+      const res = await fetch('http://localhost:3001/ai-evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ essay, taskType })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setAiResult(data);
+      } else {
+        alert(data.error || 'AI evaluation failed');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error calling AI API');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div className="App">
       <header className="App-header">
@@ -46,7 +106,42 @@ function App() {
       </header>
 
       <div className="container">
-        <form onSubmit={handleSubmit} className="evaluation-form">
+        
+            {/* OCR Section */}
+        <div className="form-group">
+          <label>Upload Handwritten Essay Image (Optional)</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                setImageFile(e.target.files[0]);
+              }
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleOcr}
+            disabled={!imageFile || ocrLoading}
+            className="ocr-btn"
+          >
+            {ocrLoading ? 'Extracting Text...' : 'Extract Text from Image'}
+          </button>
+        </div>
+
+        {/* AI Scoring Toggle */}
+        <div className="form-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={useAi}
+              onChange={(e) => setUseAi(e.target.checked)}
+            />
+            Use Advanced AI Scoring (OpenAI GPT)
+          </label>
+        </div>
+
+<form onSubmit={handleSubmit} className="evaluation-form">
           <div className="form-group">
             <label htmlFor="taskType">Task Type:</label>
             <textarea
