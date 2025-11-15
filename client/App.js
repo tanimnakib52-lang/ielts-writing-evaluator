@@ -254,7 +254,7 @@ try {
                   ) : (
                     <li>{results.strengths}</li>
                   )}
-                </ul>
+                </ul
               </div>
             )}
 
@@ -268,7 +268,7 @@ try {
                     ))
                   ) : (
                     <li>{results.improvements}</li>
-                  )}
+                  )
                 </ul>
               </div>
             )}
