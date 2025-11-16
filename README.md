@@ -1,13 +1,13 @@
 # IELTS Writing Evaluator
 
-A comprehensive, **free and open-source** IELTS Writing Task evaluator with **OCR support for handwritten essays** and **AI-powered scoring** using OpenAI GPT.
+A comprehensive, **free and open-source** IELTS Writing Task evaluator with **OCR support for handwritten essays** and **AI-powered scoring** using Google Gemini GPT.
 
 ## ✨ Features
 
 ### Core Features
 - ✅ **Logic-Based Scoring**: Advanced grammar, vocabulary, and coherence analysis
 - 📸 **OCR Support**: Upload handwritten essay images and extract text automatically
-- 🤖 **AI-Powered Scoring**: Optional OpenAI GPT integration for human-like feedback
+- 🤖 **AI-Powered Scoring**: Optional Google Gemini GPT integration for human-like feedback
 - 📊 **IELTS Band Scores**: Get scores for all four criteria (TR, CC, LR, GRA)
 - 💡 **Actionable Feedback**: Detailed suggestions for improvement
 - 🎯 **Task-Specific Evaluation**: Separate evaluation for Task 1 and Task 2
@@ -25,7 +25,7 @@ A comprehensive, **free and open-source** IELTS Writing Task evaluator with **OC
 ### Prerequisites
 - Node.js (v14 or higher)
 - npm or yarn
-- (Optional) OpenAI API key for AI scoring
+- (Optional) Google Gemini API key for AI scoring
 
 ### Installation
 
@@ -51,7 +51,7 @@ npm install
 ```bash
 cd ../api
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Edit .env and add your Google Gemini_API_KEY
 ```
 
 ### Running Locally
@@ -86,7 +86,7 @@ npm start
 
 ### AI-Powered Scoring
 1. Check "Use Advanced AI Scoring"
-2. Ensure OPENAI_API_KEY is configured
+2. Ensure Google Gemini_API_KEY is configured
 3. Submit your essay for AI-based feedback
 
 ## 🛠️ Tech Stack
@@ -94,7 +94,7 @@ npm start
 ### Backend
 - **Express.js**: REST API server
 - **Tesseract.js**: OCR engine for handwriting recognition
-- **OpenAI GPT-4**: AI-powered essay evaluation
+- **Google Gemini GPT-4**: AI-powered essay evaluation
 - **CORS**: Cross-origin resource sharing
 
 ### Frontend
@@ -122,7 +122,7 @@ ielts-writing-evaluator/
 ### Environment Variables (api/.env)
 
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
+Google Gemini_API_KEY=your_Google Gemini_api_key_here
 PORT=3001
 CORS_ORIGIN=http://localhost:3000
 ```
