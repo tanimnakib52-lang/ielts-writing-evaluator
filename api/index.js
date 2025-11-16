@@ -116,13 +116,13 @@ function analyzeVocabulary(text) {
 }
 
 // ---------- Scoring model (IELTS-like) ----------
-// Four criteria: Task Response (TR), Coherence & Cohesion (CC), Lexical Resource (LR), Grammatical Range & Accuracy (GRA)
+// Four criteriaTask Achievement (Task 1) / Task Response (Task 2), Coherence & Cohesion (CC), Lexical Resource (LR), Grammatical Range & Accuracy (GRA)
 // Return finer steps: .0, .25, .5, .75
 function toQuarterBand(score) {
   return Math.round(score * 4) / 4; // to nearest 0.25
 }
 
-function scoreEssay(text) {
+function scoreEssay(text, taskType = 'task2') {
   const words = tokenizeWords(text);
   const sentences = tokenizeSentences(text);
   const paragraphs = text.split(/\n\n+/).filter(p => p.trim()).length;
@@ -193,7 +193,7 @@ function scoreEssay(text) {
       avgWordLen: averageWordLength(text)
     },
     bandScores: {
-      taskAchievement: TR,
+...(taskType === 'task1' ? { taskAchievement: TR } : { taskResponse: TR }),
       coherenceCohesion: CC,
       lexicalResource: LR,
       grammaticalRange: GRA,
@@ -261,9 +261,9 @@ function buildFeedback(text) {
 
 // ---------- API ----------
 app.post('/evaluate', (req, res) => {
-  const { essay = '' } = req.body || {};
+  const { essay = '' } = req.body || {, taskType = 'task2' } = req.body || {};
   const text = String(essay || '').replace(/\r/g, '\n');
-  const result = scoreEssay(text);
+  const result = scoreEssay(te, taskType););
   const feedback = buildFeedback(text);
   res.json({ ...result, feedback });
 });
