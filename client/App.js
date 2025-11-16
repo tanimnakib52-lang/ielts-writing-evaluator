@@ -34,11 +34,11 @@ function App() {
 
     // Otherwise use normal evaluation
 try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/ai-evaluate`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/evaluate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
+        /evaluate
         body: JSON.stringify({
           essay: essay,
           taskType: taskType,
