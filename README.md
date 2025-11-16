@@ -1,6 +1,6 @@
 # IELTS Writing Evaluator
 
-A comprehensive, **free and open-source** IELTS Writing Task evaluator with **OCR support for handwritten essays** and **AI-powered scoring** using Google Gemini GPT.
+A comprehensive, **free and open-source** IELTS Writing Task evaluator with **OCR support for handwritten essays** and **AI-powered scoring** using Google Gemini.
 
 ## ✨ Features
 
