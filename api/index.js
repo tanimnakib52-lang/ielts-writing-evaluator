@@ -197,7 +197,7 @@ function scoreEssay(text) {
       coherenceCohesion: CC,
       lexicalResource: LR,
       grammaticalRange: GRA,
-      overall: { overall
+      overall: overall
     }
   };
 }
@@ -310,8 +310,8 @@ app.post('/ai-evaluate', async (req, res) => {
       return res.status(400).json({ error: 'Essay text is required' });
     }
 
-    if (!) {
-      return res.status(500).json({ error: 'OpenAI API key not configured' });
+    if (process.env.GOOGLE_API_KEY) {
+      return res.status(500).json({ error: 'Google Gemini API key not configured' });
     }
 
     const prompt = `You are an official IELTS writing examiner.
