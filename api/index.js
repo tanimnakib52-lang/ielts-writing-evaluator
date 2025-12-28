@@ -261,10 +261,8 @@ function buildFeedback(text) {
 
 // ---------- API ----------
 app.post('/evaluate', (req, res) => {
-  const { essay = '' } = req.body || {, taskType = 'task2' } = req.body || {};
-  const text = String(essay || '').replace(/\r/g, '\n');
-  const result = scoreEssay(te, taskType););
-  const feedback = buildFeedback(text);
+  const { essay = '', taskType = 'task2' } = req.body || {};  const text = String(essay || '').replace(/\r/g, '\n');
+  const result = scoreEssay(text, taskType);  const feedback = buildFeedback(text);
   res.json({ ...result, feedback });
 });
 
@@ -310,8 +308,7 @@ app.post('/ai-evaluate', async (req, res) => {
       return res.status(400).json({ error: 'Essay text is required' });
     }
 
-    if (process.env.GOOGLE_API_KEY) {
-      return res.status(500).json({ error: 'Google Gemini API key not configured' });
+    if (!process.env.GOOGLE_API_KEY) {      return res.status(500).json({ error: 'Google Gemini API key not configured' });
     }
 
     const prompt = `You are an official IELTS writing examiner.
