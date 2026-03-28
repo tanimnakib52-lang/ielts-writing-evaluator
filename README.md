@@ -1,167 +1,72 @@
 # IELTS Writing Evaluator
 
-A comprehensive, **free and open-source** IELTS Writing Task evaluator with **OCR support for handwritten essays** and **AI-powered scoring** using Google Gemini.
+A web-based tool that evaluates IELTS Writing Task 1 and Task 2 essays. I built this project to help IELTS learners get instant, detailed feedback on their writing without paying for expensive tutoring services.
 
-## ✨ Features
+Live demo: https://ielts-writing-evaluator.vercel.app
 
-### Core Features
-- ✅ **Logic-Based Scoring**: Advanced grammar, vocabulary, and coherence analysis
-- 📸 **OCR Support**: Upload handwritten essay images and extract text automatically
-- 🤖 **AI-Powered Scoring**: Optional Google Gemini GPT integration for human-like feedback
-- 📊 **IELTS Band Scores**: Get scores for all four criteria (TR, CC, LR, GRA)
-- 💡 **Actionable Feedback**: Detailed suggestions for improvement
-- 🎯 **Task-Specific Evaluation**: Separate evaluation for Task 1 and Task 2
+## What it does
 
-### Advanced Analysis
-- Grammar checks (run-ons, fragments, comma splices)
-- Passive/active voice detection
-- Vocabulary richness analysis
-- Sentence variety assessment
-- Academic word usage tracking
-- Cohesive devices identification
+- Scores essays across all 4 IELTS criteria: Task Response (TR), Coherence & Cohesion (CC), Lexical Resource (LR), and Grammatical Range & Accuracy (GRA)
+- Supports handwritten essay images via OCR (Tesseract.js) — upload a photo, it extracts the text automatically
+- Optional AI-powered feedback using Google Gemini API for more human-like evaluation
+- Separate evaluation modes for Task 1 and Task 2
+- Grammar analysis: detects run-on sentences, fragments, passive/active voice
+- Vocabulary analysis: checks academic word usage, lexical richness, cohesive devices
 
-## 🚀 Quick Start
+## Tech stack
 
-### Prerequisites
-- Node.js (v14 or higher)
-- npm or yarn
-- (Optional) Google Gemini API key for AI scoring
+**Backend:** Node.js, Express.js, Tesseract.js, Google Gemini API
 
-### Installation
+**Frontend:** React, CSS3
 
-1. **Clone the repository**
+**Deployment:** Vercel (frontend), Render (backend)
+
+## Project structure
+
+```
+ielts-writing-evaluator/
+├── api/          # Express.js backend
+│   ├── index.js  # Main server + scoring logic
+│   └── .env.example
+├── client/       # React frontend
+│   ├── App.js
+│   └── App.css
+└── README.md
+```
+
+## Running locally
+
+**1. Clone the repo**
 ```bash
 git clone https://github.com/tanimnakib52-lang/ielts-writing-evaluator.git
 cd ielts-writing-evaluator
 ```
 
-2. **Install API dependencies**
+**2. Start the backend**
 ```bash
 cd api
 npm install
-```
-
-3. **Install client dependencies**
-```bash
-cd ../client
-npm install
-```
-
-4. **Configure environment variables** (Optional, for AI scoring)
-```bash
-cd ../api
-cp .env.example .env
-# Edit .env and add your Google Gemini_API_KEY
-```
-
-### Running Locally
-
-**Terminal 1 - Start API server:**
-```bash
-cd api
 npm start
-# Server runs on http://localhost:3001
+# Runs on http://localhost:3001
 ```
 
-**Terminal 2 - Start React client:**
+**3. Start the frontend**
 ```bash
 cd client
+npm install
 npm start
-# App opens at http://localhost:3000
+# Opens at http://localhost:3000
 ```
 
-## 📖 Usage
+**4. (Optional) Add Google Gemini API key**
 
-### Text Input
-1. Select Task Type (Task 1 or Task 2)
-2. Paste or type your essay
-3. Click "Submit" for evaluation
-
-### Handwritten Essay OCR
-1. Click "Upload Handwritten Essay Image"
-2. Select an image file (JPG, PNG)
-3. Click "Extract Text from Image"
-4. Review and edit extracted text
-5. Click "Submit" for evaluation
-
-### AI-Powered Scoring
-1. Check "Use Advanced AI Scoring"
-2. Ensure Google Gemini_API_KEY is configured
-3. Submit your essay for AI-based feedback
-
-## 🛠️ Tech Stack
-
-### Backend
-- **Express.js**: REST API server
-- **Tesseract.js**: OCR engine for handwriting recognition
-- **Google Gemini GPT-4**: AI-powered essay evaluation
-- **CORS**: Cross-origin resource sharing
-
-### Frontend
-- **React**: UI framework
-- **CSS3**: Styling and animations
-
-## 📂 Project Structure
-
+Create `api/.env` from the example file and add your key:
 ```
-ielts-writing-evaluator/
-├── api/                  # Backend API
-│   ├── index.js         # Main server file
-│   ├── package.json     # API dependencies
-│   ├── .env.example     # Environment template
-│   └── README.md        # API documentation
-├── client/              # React frontend
-│   ├── App.js          # Main component
-│   ├── App.css         # Styles
-│   └── package.json    # Client dependencies
-└── README.md           # This file
-```
-
-## 🔧 Configuration
-
-### Environment Variables (api/.env)
-
-```env
-Google Gemini_API_KEY=your_Google Gemini_api_key_here
+GEMINI_API_KEY=your_key_here
 PORT=3001
 CORS_ORIGIN=http://localhost:3000
 ```
 
-## 🌐 Deployment
+## License
 
-### Vercel (Recommended for Frontend)
-1. Push code to GitHub
-2. Import project in Vercel
-3. Set environment variables
-4. Deploy
-
-### Backend Deployment
-- **Render**: Free tier available
-- **Railway**: Easy Node.js deployment
-- **Heroku**: Classic PaaS option
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push and create a Pull Request
-
-## 📝 License
-
-MIT License - feel free to use this project for learning or production.
-
-## 🔗 Links
-
-- **Live Demo**: [ielts-writing-evaluator.vercel.app](https://ielts-writing-evaluator.vercel.app/)
-- **API Documentation**: See `/api/README.md`
-- **Issues**: [GitHub Issues](https://github.com/tanimnakib52-lang/ielts-writing-evaluator/issues)
-
-## 💬 Support
-
-For questions or support, please open an issue on GitHub.
-
----
-
-**Made with ❤️ for IELTS learners worldwide**
+MIT — free to use for learning or personal projects.
