@@ -1,54 +1,64 @@
 import React, { useState } from 'react';
 import './App.css';
 
-function App() {
+function ScoreBox({ label, value, highlight }) {
+  return (
+    <div className={`score-box${highlight ? ' score-box--overall' : ''}`}>
+      <span className="score-label">{label}</span>
+      <span className="score-value">{value ?? 'N/A'}</span>
+    </div>
+  );
+}
+
+function FeedbackBlock({ icon, title, items, cls }) {
+  return (
+    <div className={`feedback-block feedback-block--${cls}`}>
+      <h3>{icon} {title}</h3>
+      <ul>{items && items.map((item, i) => <li key={i}>{item}</li>)}</ul>
+    </div>
+  );
+}
+
+export default function App() {
   const [essay, setEssay] = useState('');
-  const [taskType, setTaskType] = useState('Task 1');
+  const [taskType, setTaskType] = useState('task1');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-    // OCR states
   const [imageFile, setImageFile] = useState(null);
-  const [ocrText, setOcrText] = useState('');
   const [ocrLoading, setOcrLoading] = useState(false);
-  
-  // AI scoring states
   const [useAi, setUseAi] = useState(false);
   const [aiResult, setAiResult] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
+
+  const API = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setResults(null);
-        setAiResult(null); // Clear previous AI result
+    setAiResult(null);
 
-    
-    // Check if AI scoring is enabled
     if (useAi) {
       await handleAiEvaluate();
       setLoading(false);
       return;
     }
 
-    // Otherwise use normal evaluation
-try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/evaluate`, {
+    try {
+      const response = await fetch(API + '/evaluate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        /evaluate
+        },
         body: JSON.stringify({
           essay: essay,
           taskType: taskType,
         }),
       });
-
       if (!response.ok) {
         throw new Error('Failed to evaluate essay');
       }
-
       const data = await response.json();
       setResults(data);
     } catch (err) {
@@ -58,18 +68,16 @@ try {
     }
   };
 
-    const handleOcr = async () => {
+  const handleOcr = async () => {
     if (!imageFile) return;
     setOcrLoading(true);
     try {
       const formData = new FormData();
       formData.append('essayImage', imageFile);
-
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/ocr-evaluate`, {
+      const res = await fetch(API + '/ocr-evaluate', {
         method: 'POST',
-        body: formData
+        body: formData,
       });
-
       const data = await res.json();
       if (data.success) {
         setOcrText(data.text);
@@ -89,12 +97,11 @@ try {
     if (!essay) return;
     setAiLoading(true);
     try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/ai-evaluate`, {
+      const res = await fetch(API + '/ai-evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ essay, taskType })
+        body: JSON.stringify({ essay, taskType }),
       });
-
       const data = await res.json();
       if (data.success) {
         setAiResult(data);
@@ -110,16 +117,15 @@ try {
   };
 
   return (
-    <div className="App">
-      <header className="App-header">
+    <div className="app">
+      <header className="app-header">
         <h1>IELTS Writing Evaluator</h1>
+        <p>Instant band-score feedback for Task 1 and Task 2</p>
       </header>
-
       <div className="container">
-        
-            {/* OCR Section */}
-        <div className="form-group">
-          <label>Upload Handwritten Essay Image (Optional)</label>
+
+        <section className="card">
+          <h3>Upload Handwritten Essay Image (optional)</h3>
           <input
             type="file"
             accept="image/*"
@@ -137,9 +143,8 @@ try {
           >
             {ocrLoading ? 'Extracting Text...' : 'Extract Text from Image'}
           </button>
-        </div>
+        </section>
 
-        {/* AI Scoring Toggle */}
         <div className="form-group">
           <label>
             <input
@@ -147,35 +152,34 @@ try {
               checked={useAi}
               onChange={(e) => setUseAi(e.target.checked)}
             />
-            Use Advanced AI Scoring (OpenAI GPT)
+            {' '}Use Advanced AI Scoring
           </label>
         </div>
 
-<form onSubmit={handleSubmit} className="evaluation-form">
+        <form onSubmit={handleSubmit} className="evaluation-form">
           <div className="form-group">
             <label htmlFor="taskType">Task Type:</label>
-            <textarea
+            <select
               id="taskType"
               value={taskType}
               onChange={(e) => setTaskType(e.target.value)}
-              placeholder="Enter task type (e.g., Task 1, Task 2)"
-              rows="2"
               required
-            />
+            >
+              <option value="task1">Task 1</option>
+              <option value="task2">Task 2</option>
+            </select>
           </div>
-
           <div className="form-group">
             <label htmlFor="essay">Your Essay:</label>
             <textarea
               id="essay"
               value={essay}
-              onChange={(e) => setEssay(e.target.value)}
-              placeholder="Paste your IELTS essay here..."
               rows="15"
               required
+              placeholder="Paste your IELTS essay here..."
+              onChange={(e) => setEssay(e.target.value)}
             />
           </div>
-
           <button type="submit" disabled={loading} className="submit-btn">
             {loading ? 'Evaluating...' : 'Submit'}
           </button>
@@ -191,160 +195,58 @@ try {
         {results && (
           <div className="results-section">
             <h2>Evaluation Results</h2>
-            
             {results.bandScores && (
               <div className="band-scores">
                 <h3>Band Scores</h3>
                 <div className="scores-grid">
-                  {results.bandScores.taskAchievement && (
-                    <div className="score-item">
-                      <span className="score-label">Task Achievement:</span>
-                      <span className="score-value">{results.bandScores.taskAchievement}</span>
-                    </div>
-                  )}
-                  {results.bandScores.coherenceCohesion && (
-                    <div className="score-item">
-                      <span className="score-label">Coherence & Cohesion:</span>
-                      <span className="score-value">{results.bandScores.coherenceCohesion}</span>
-                    </div>
-                  )}
-                  {results.bandScores.lexicalResource && (
-                    <div className="score-item">
-                      <span className="score-label">Lexical Resource:</span>
-                      <span className="score-value">{results.bandScores.lexicalResource}</span>
-                    </div>
-                  )}
-                  {results.bandScores.grammaticalRange && (
-                    <div className="score-item">
-                      <span className="score-label">Grammatical Range & Accuracy:</span>
-                      <span className="score-value">{results.bandScores.grammaticalRange}</span>
-                    </div>
-                  )}
-                  {results.bandScores.overall && (
-                    <div className="score-item overall">
-                      <span className="score-label">Overall Band Score:</span>
-                      <span className="score-value">{results.bandScores.overall}</span>
-                    </div>
-                  )}
+                  <ScoreBox label="Task Achievement" value={results.bandScores.taskAchievement} />
+                  <ScoreBox label="Task Response" value={results.bandScores.taskResponse} />
+                  <ScoreBox label="Coherence & Cohesion" value={results.bandScores.coherenceCohesion} />
+                  <ScoreBox label="Lexical Resource" value={results.bandScores.lexicalResource} />
+                  <ScoreBox label="Grammatical Range" value={results.bandScores.grammaticalRange} />
+                  <ScoreBox label="Overall Band Score" value={results.bandScores.overall} highlight={true} />
                 </div>
               </div>
             )}
-
-            {results.feedback && (
-              <div className="feedback-section">
-                <h3>Detailed Feedback</h3>
-                <div className="feedback-content">
-                  {typeof results.feedback === 'string' ? (
-                    <p>{results.feedback}</p>
-                  ) : (
-                    <pre>{JSON.stringify(results.feedback, null, 2)}</pre>
-                  )}
-                </div>
-              </div>
+            {results.counts && (
+              <p className="stats">
+                Words: <strong>{results.counts.words}</strong> |
+                Sentences: <strong>{results.counts.sentences}</strong> |
+                Paragraphs: <strong>{results.counts.paragraphs}</strong>
+              </p>
             )}
-
-            {results.strengths && (
-              <div className="strengths-section">
-                <h3>Strengths</h3>
-                <ul>
-                  {Array.isArray(results.strengths) ? (
-                    results.strengths.map((strength, index) => (
-                      <li key={index}>{strength}</li>
-                    ))
-                  ) : (
-                    <li>{results.strengths}</li>
-                  )}
-                </ul
-              </div>
-            )}
-
-            {results.improvements && (
-              <div className="improvements-section">
-                <h3>Areas for Improvement</h3>
-                <ul>
-                  {Array.isArray(results.improvements) ? (
-                    results.improvements.map((improvement, index) => (
-                      <li key={index}>{improvement}</li>
-                    ))
-                  ) : (
-                    <li>{results.improvements}</li>
-                  )
-                </ul>
-              </div>
+            {Array.isArray(results.feedback) && results.feedback.length > 0 && (
+              <FeedbackBlock icon="&#128172;" title="Detailed Feedback" items={results.feedback} cls="feedback" />
             )}
           </div>
         )}
+
+        {aiResult && (
+          <div className="ai-results-section">
+            <h2>AI-Powered Evaluation</h2>
+            <div className="band-scores">
+              <h3>AI Band Scores</h3>
+              <div className="scores-grid">
+                <ScoreBox label="Task Achievement" value={aiResult.bands && aiResult.bands.taskAchievement} />
+                <ScoreBox label="Coherence & Cohesion" value={aiResult.bands && aiResult.bands.coherenceCohesion} />
+                <ScoreBox label="Lexical Resource" value={aiResult.bands && aiResult.bands.lexicalResource} />
+                <ScoreBox label="Grammatical Range" value={aiResult.bands && aiResult.bands.grammaticalRangeAccuracy} />
+                <ScoreBox label="Overall Band Score" value={aiResult.bands && aiResult.bands.overall} highlight={true} />
+              </div>
+            </div>
+            {aiResult.strengths && aiResult.strengths.length > 0 && (
+              <FeedbackBlock icon="&#9989;" title="Strengths" items={aiResult.strengths} cls="strengths" />
+            )}
+            {aiResult.weaknesses && aiResult.weaknesses.length > 0 && (
+              <FeedbackBlock icon="&#9888;" title="Areas for Improvement" items={aiResult.weaknesses} cls="weaknesses" />
+            )}
+            {aiResult.suggestions && aiResult.suggestions.length > 0 && (
+              <FeedbackBlock icon="&#128161;" title="Suggestions" items={aiResult.suggestions} cls="suggestions" />
+            )}
+          </div>
+        )}
+
       </div>
     </div>
-
-      {/* AI Results Section */}
-      {aiResult && (
-        <div className="ai-results-section">
-          <h2>🤖 AI-Powered Evaluation Results</h2>
-          
-          <div className="ai-band-scores">
-            <div className="overall-band">
-              <h3>Overall Band Score</h3>
-              <div className="band-number">{aiResult.bands?.overall || 'N/A'}</div>
-            </div>
-            
-            <div className="criteria-scores">
-              <div className="score-item">
-                <span className="score-label">Task Achievement:</span>
-                <span className="score-value">{aiResult.bands?.taskAchievement || 'N/A'}</span>
-              </div>
-              <div className="score-item">
-                <span className="score-label">Coherence & Cohesion:</span>
-                <span className="score-value">{aiResult.bands?.coherenceCohesion || 'N/A'}</span>
-              </div>
-              <div className="score-item">
-                <span className="score-label">Lexical Resource:</span>
-                <span className="score-value">{aiResult.bands?.lexicalResource || 'N/A'}</span>
-              </div>
-              <div className="score-item">
-                <span className="score-label">Grammatical Range & Accuracy:</span>
-                <span className="score-value">{aiResult.bands?.grammaticalRangeAccuracy || 'N/A'}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="ai-feedback">
-            {aiResult.strengths && aiResult.strengths.length > 0 && (
-              <div className="feedback-section strengths">
-                <h3>✅ Strengths</h3>
-                <ul>
-                  {aiResult.strengths.map((strength, index) => (
-                    <li key={index}>{strength}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {aiResult.weaknesses && aiResult.weaknesses.length > 0 && (
-              <div className="feedback-section weaknesses">
-                <h3>⚠️ Areas for Improvement</h3>
-                <ul>
-                  {aiResult.weaknesses.map((weakness, index) => (
-                    <li key={index}>{weakness}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {aiResult.suggestions && aiResult.suggestions.length > 0 && (
-              <div className="feedback-section suggestions">
-                <h3>💡 Suggestions</h3>
-                <ul>
-                  {aiResult.suggestions.map((suggestion, index) => (
-                    <li key={index}>{suggestion}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
   );
 }
-
-export default App;
