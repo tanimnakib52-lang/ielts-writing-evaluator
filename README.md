@@ -1,72 +1,65 @@
-# IELTS Writing Evaluator
+# BandCheck — IELTS Writing Evaluator
 
-A web-based tool that evaluates IELTS Writing Task 1 and Task 2 essays. I built this project to help IELTS learners get instant, detailed feedback on their writing without paying for expensive tutoring services.
+AI-powered IELTS Writing Task 1 & Task 2 band-score predictor with detailed feedback.
 
-Live demo: https://ielts-writing-evaluator.vercel.app
+- **Frontend**: React (CRA) — `client/`
+- **Backend**: Express on Vercel Serverless — `api/index.js`
+- **Models** (Hugging Face Inference API):
+  - Task 2 scoring: `KevSun/IELTS_essay_scoring`
+  - Task 1 scoring: `KevSun/Engessay_grading_ML`
+  - Feedback (both tasks): `KevSun/IELTS_essay_comments`
 
-## What it does
+## Local development
 
-- Scores essays across all 4 IELTS criteria: Task Response (TR), Coherence & Cohesion (CC), Lexical Resource (LR), and Grammatical Range & Accuracy (GRA)
-- Supports handwritten essay images via OCR (Tesseract.js) — upload a photo, it extracts the text automatically
-- Optional AI-powered feedback using Google Gemini API for more human-like evaluation
-- Separate evaluation modes for Task 1 and Task 2
-- Grammar analysis: detects run-on sentences, fragments, passive/active voice
-- Vocabulary analysis: checks academic word usage, lexical richness, cohesive devices
-
-## Tech stack
-
-**Backend:** Node.js, Express.js, Tesseract.js, Google Gemini API
-
-**Frontend:** React, CSS3
-
-**Deployment:** Vercel (frontend), Render (backend)
-
-## Project structure
-
-```
-ielts-writing-evaluator/
-├── api/          # Express.js backend
-│   ├── index.js  # Main server + scoring logic
-│   └── .env.example
-├── client/       # React frontend
-│   ├── App.js
-│   └── App.css
-└── README.md
-```
-
-## Running locally
-
-**1. Clone the repo**
 ```bash
-git clone https://github.com/tanimnakib52-lang/ielts-writing-evaluator.git
-cd ielts-writing-evaluator
-```
-
-**2. Start the backend**
-```bash
+# API
 cd api
+cp .env.example .env   # then add your HF_TOKEN
 npm install
-npm start
-# Runs on http://localhost:3001
-```
+npm run dev            # http://localhost:3001
 
-**3. Start the frontend**
-```bash
+# Client (separate terminal)
 cd client
 npm install
-npm start
-# Opens at http://localhost:3000
+npm start              # http://localhost:3000
 ```
 
-**4. (Optional) Add Google Gemini API key**
+## Environment variables
 
-Create `api/.env` from the example file and add your key:
+| Name       | Where    | Required | Description                              |
+|------------|----------|----------|------------------------------------------|
+| `HF_TOKEN` | Vercel / api `.env` | yes | Hugging Face Inference API token |
+| `REACT_APP_API_URL` | client | no | Defaults to `/api` in production |
+
+## API
+
+`POST /api/evaluate`
+
+```json
+{
+  "task": "task2",          // or "task1"
+  "topic": "optional question/topic",
+  "essay": "your essay text"
+}
 ```
-GEMINI_API_KEY=your_key_here
-PORT=3001
-CORS_ORIGIN=http://localhost:3000
+
+Response:
+
+```json
+{
+  "task": "task2",
+  "bandScores": {
+    "taskResponse": 7.0,
+    "coherenceCohesion": 6.5,
+    "lexicalResource": 7.0,
+    "grammaticalRange": 6.5,
+    "overall": 7.0
+  },
+  "feedback": ["...", "..."],
+  "counts": { "words": 285, "sentences": 16, "paragraphs": 4 }
+}
 ```
 
-## License
+## Deploy
 
-MIT — free to use for learning or personal projects.
+Push to GitHub — Vercel auto-builds via `vercel.json`. Set `HF_TOKEN` in Project Settings → Environment Variables, then redeploy.

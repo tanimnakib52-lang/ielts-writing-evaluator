@@ -1,238 +1,290 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
-function App() {
-  const [essay, setEssay] = useState('');
-  const [taskType, setTaskType] = useState('Task 2');
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+const API = process.env.REACT_APP_API_URL || '/api';
 
-  // OCR states
-  const [imageFile, setImageFile] = useState(null);
-  const [ocrLoading, setOcrLoading] = useState(false);
+const TASK_COPY = {
+  task2: {
+    label: 'Task 2',
+    minWords: 250,
+    topicLabel: 'Essay Question / Topic',
+    topicPlaceholder:
+      'e.g., Some people think that universities should provide free education. To what extent do you agree or disagree?',
+    essayPlaceholder:
+      'Paste or type your IELTS Task 2 essay here. Aim for at least 250 words across an introduction, two body paragraphs and a conclusion.',
+  },
+  task1: {
+    label: 'Task 1',
+    minWords: 150,
+    topicLabel: 'Chart / Diagram Description',
+    topicPlaceholder:
+      'e.g., The graph below shows the percentage of households in different income brackets in three countries between 2000 and 2020.',
+    essayPlaceholder:
+      'Paste or type your IELTS Task 1 report here. Aim for at least 150 words summarising the main features of the chart, graph, or diagram.',
+  },
+};
 
-  // AI scoring states
-  const [useAi, setUseAi] = useState(false);
-  const [aiResult, setAiResult] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
+const CRITERIA_TASK2 = [
+  { key: 'taskResponse', short: 'TR', label: 'Task Response' },
+  { key: 'coherenceCohesion', short: 'CC', label: 'Coherence & Cohesion' },
+  { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
+  { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
+];
+const CRITERIA_TASK1 = [
+  { key: 'taskAchievement', short: 'TA', label: 'Task Achievement' },
+  { key: 'coherenceCohesion', short: 'CC', label: 'Coherence & Cohesion' },
+  { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
+  { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
+];
 
-  const API = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+function bandColor(v) {
+  if (v == null) return 'var(--muted)';
+  if (v < 5) return '#e63946';
+  if (v < 6) return '#f59e0b';
+  if (v < 7) return '#d4a017';
+  return '#16a34a';
+}
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setResults(null);
-    setAiResult(null);
-    if (useAi) {
-      await handleAiEvaluate();
-      setLoading(false);
-      return;
-    }
-    try {
-      const response = await fetch(`${API}/evaluate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ essay, taskType }),
-      });
-      if (!response.ok) throw new Error('Failed to evaluate essay');
-      const data = await response.json();
-      setResults(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+function countWords(text) {
+  return (text.match(/\b[\w']+\b/g) || []).length;
+}
+function countSentences(text) {
+  return (text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g) || []).length || (text.trim() ? 1 : 0);
+}
+function countParagraphs(text) {
+  return text.split(/\n\s*\n/).filter(p => p.trim().length).length || (text.trim() ? 1 : 0);
+}
 
-  const handleOcr = async () => {
-    if (!imageFile) return;
-    setOcrLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append('essayImage', imageFile);
-      const res = await fetch(`${API}/ocr-evaluate`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.success) {
-        setEssay(data.text);
-      } else {
-        alert(data.error || 'OCR failed');
-      }
-    } catch (e) {
-      alert('Error calling OCR API');
-    } finally {
-      setOcrLoading(false);
-    }
-  };
-
-  const handleAiEvaluate = async () => {
-    if (!essay) return;
-    setAiLoading(true);
-    try {
-      const res = await fetch(`${API}/ai-evaluate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ essay, taskType }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setAiResult(data);
-      } else {
-        alert(data.error || 'AI evaluation failed');
-      }
-    } catch (e) {
-      alert('Error calling AI API');
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
+function CriterionCard({ crit, value }) {
+  const pct = value == null ? 0 : Math.max(0, Math.min(100, (value / 9) * 100));
+  const color = bandColor(value);
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>IELTS Writing Evaluator</h1>
-      </header>
-      <div className="container">
-
-        {/* OCR Section */}
-        <div className="form-group">
-          <label>Upload Handwritten Essay Image (Optional)</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => e.target.files && setImageFile(e.target.files[0])}
-          />
-          <button
-            type="button"
-            onClick={handleOcr}
-            disabled={!imageFile || ocrLoading}
-            className="ocr-btn"
-          >
-            {ocrLoading ? 'Extracting Text...' : 'Extract Text from Image'}
-          </button>
+    <div className="crit-card">
+      <div className="crit-head">
+        <div className="crit-name">
+          <span className="crit-short" style={{ background: color }}>{crit.short}</span>
+          <span className="crit-label">{crit.label}</span>
         </div>
-
-        {/* AI Toggle */}
-        <div className="form-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={useAi}
-              onChange={(e) => setUseAi(e.target.checked)}
-            />
-            {' '}Use Advanced AI Scoring (Google Gemini)
-          </label>
-        </div>
-
-        <form onSubmit={handleSubmit} className="evaluation-form">
-          <div className="form-group">
-            <label htmlFor="taskType">Task Type</label>
-            <select
-              id="taskType"
-              value={taskType}
-              onChange={(e) => setTaskType(e.target.value)}
-            >
-              <option value="Task 1">Task 1</option>
-              <option value="Task 2">Task 2</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="essay">Your Essay</label>
-            <textarea
-              id="essay"
-              value={essay}
-              onChange={(e) => setEssay(e.target.value)}
-              placeholder="Paste your IELTS essay here..."
-              rows={15}
-              required
-            />
-          </div>
-
-          <button type="submit" disabled={loading} className="submit-btn">
-            {loading ? 'Evaluating...' : 'Submit'}
-          </button>
-        </form>
-
-        {error && (
-          <div className="error-message">
-            <h3>Error</h3>
-            <p>{error}</p>
-          </div>
-        )}
-
-        {results && (
-          <div className="results-section">
-            <h2>Evaluation Results</h2>
-            {results.bandScores && (
-              <div className="band-scores">
-                <h3>Band Scores</h3>
-                <div className="scores-grid">
-                  <div className="score-item"><span>Task Achievement</span><span>{results.bandScores.taskAchievement || results.bandScores.taskResponse}</span></div>
-                  <div className="score-item"><span>Coherence & Cohesion</span><span>{results.bandScores.coherenceCohesion}</span></div>
-                  <div className="score-item"><span>Lexical Resource</span><span>{results.bandScores.lexicalResource}</span></div>
-                  <div className="score-item"><span>Grammatical Range</span><span>{results.bandScores.grammaticalRange}</span></div>
-                  <div className="score-item overall"><span>Overall Band Score</span><span>{results.bandScores.overall}</span></div>
-                </div>
-              </div>
-            )}
-            {results.feedback && (
-              <div className="feedback-section">
-                <h3>Detailed Feedback</h3>
-                <div className="feedback-content">
-                  {typeof results.feedback === 'string'
-                    ? <p>{results.feedback}</p>
-                    : <pre>{JSON.stringify(results.feedback, null, 2)}</pre>
-                  }
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {aiResult && (
-          <div className="ai-results-section">
-            <h2>AI-Powered Evaluation Results</h2>
-            <div className="ai-band-scores">
-              <div className="overall-band">
-                <h3>Overall Band Score</h3>
-                <div className="band-number">{aiResult.bands?.overall ?? 'N/A'}</div>
-              </div>
-              <div className="criteria-scores">
-                <div className="score-item"><span>Task Achievement</span><span>{aiResult.bands?.taskAchievement ?? 'N/A'}</span></div>
-                <div className="score-item"><span>Coherence & Cohesion</span><span>{aiResult.bands?.coherenceCohesion ?? 'N/A'}</span></div>
-                <div className="score-item"><span>Lexical Resource</span><span>{aiResult.bands?.lexicalResource ?? 'N/A'}</span></div>
-                <div className="score-item"><span>Grammatical Range</span><span>{aiResult.bands?.grammaticalRangeAccuracy ?? 'N/A'}</span></div>
-              </div>
-            </div>
-            {aiResult.strengths?.length > 0 && (
-              <div className="feedback-section strengths">
-                <h3>Strengths</h3>
-                <ul>{aiResult.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
-              </div>
-            )}
-            {aiResult.weaknesses?.length > 0 && (
-              <div className="feedback-section weaknesses">
-                <h3>Areas for Improvement</h3>
-                <ul>{aiResult.weaknesses.map((w, i) => <li key={i}>{w}</li>)}</ul>
-              </div>
-            )}
-            {aiResult.suggestions?.length > 0 && (
-              <div className="feedback-section suggestions">
-                <h3>Suggestions</h3>
-                <ul>{aiResult.suggestions.map((s, i) => <li key={i}>{s}</li>)}</ul>
-              </div>
-            )}
-          </div>
-        )}
-
+        <div className="crit-value" style={{ color }}>{value != null ? value.toFixed(1) : '—'}</div>
+      </div>
+      <div className="crit-bar">
+        <div
+          className="crit-bar-fill"
+          style={{ width: `${pct}%`, background: color }}
+        />
       </div>
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'light';
+    return localStorage.getItem('bandcheck-theme') || 'light';
+  });
+  const [task, setTask] = useState('task2');
+  const [topic, setTopic] = useState('');
+  const [essay, setEssay] = useState('');
+  const [results, setResults] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('bandcheck-theme', theme);
+  }, [theme]);
+
+  const copy = TASK_COPY[task];
+  const wordCount = useMemo(() => countWords(essay), [essay]);
+  const sentenceCount = useMemo(() => countSentences(essay), [essay]);
+  const paragraphCount = useMemo(() => countParagraphs(essay), [essay]);
+  const wordOk = wordCount >= copy.minWords;
+
+  const handleEvaluate = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setResults(null);
+    if (essay.trim().length < 20) {
+      setError('Please write at least a few sentences before evaluating.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task, topic, essay }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || 'Evaluation failed');
+      setResults(data);
+      setTimeout(() => {
+        const el = document.getElementById('results');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const overall = results?.bandScores?.overall;
+  const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
+
+  return (
+    <div className="bc-root">
+      <header className="bc-header">
+        <div className="bc-header-inner">
+          <div className="bc-brand">
+            <div className="bc-logo" aria-hidden>
+              <svg viewBox="0 0 32 32" width="28" height="28">
+                <rect x="2" y="14" width="4" height="14" rx="1.5" fill="currentColor" />
+                <rect x="9" y="8" width="4" height="20" rx="1.5" fill="currentColor" />
+                <rect x="16" y="2" width="4" height="26" rx="1.5" fill="currentColor" />
+                <rect x="23" y="10" width="4" height="18" rx="1.5" fill="currentColor" />
+              </svg>
+            </div>
+            <div className="bc-brand-text">
+              <div className="bc-brand-title">BandCheck</div>
+              <div className="bc-brand-sub">IELTS Writing Evaluator</div>
+            </div>
+          </div>
+          <button
+            className="bc-theme-toggle"
+            onClick={() => setTheme(t => (t === 'light' ? 'dark' : 'light'))}
+            aria-label="Toggle dark mode"
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
+        </div>
+      </header>
+
+      <main className="bc-main">
+        <section className="bc-hero">
+          <h1>IELTS Writing Essay Checker</h1>
+          <p>
+            Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.
+            Powered by Hugging Face IELTS scoring models.
+          </p>
+        </section>
+
+        <div className="bc-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={task === 'task2'}
+            className={`bc-tab ${task === 'task2' ? 'active' : ''}`}
+            onClick={() => setTask('task2')}
+          >
+            Task 2 (Essay)
+          </button>
+          <button
+            role="tab"
+            aria-selected={task === 'task1'}
+            className={`bc-tab ${task === 'task1' ? 'active' : ''}`}
+            onClick={() => setTask('task1')}
+          >
+            Task 1 (Report)
+          </button>
+        </div>
+
+        <form className="bc-form" onSubmit={handleEvaluate}>
+          <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
+          <input
+            id="topic"
+            className="bc-input"
+            type="text"
+            placeholder={copy.topicPlaceholder}
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+          />
+
+          <div className="bc-essay-head">
+            <label className="bc-label" htmlFor="essay">Your Essay</label>
+            <span className={`bc-wordcount ${wordOk ? 'ok' : ''}`}>
+              {wordCount} words
+              <span className="bc-wordcount-hint"> / min {copy.minWords}</span>
+            </span>
+          </div>
+          <textarea
+            id="essay"
+            className="bc-textarea"
+            value={essay}
+            onChange={(e) => setEssay(e.target.value)}
+            placeholder={copy.essayPlaceholder}
+            rows={16}
+          />
+
+          <button type="submit" className="bc-submit" disabled={loading}>
+            {loading ? (
+              <>
+                <span className="bc-spinner" /> Evaluating…
+              </>
+            ) : (
+              'Evaluate Essay'
+            )}
+          </button>
+
+          {error && <div className="bc-error">{error}</div>}
+        </form>
+
+        {results && (
+          <section id="results" className="bc-results">
+            <h2 className="bc-results-title">Your Band Score</h2>
+
+            <div className="bc-overall">
+              <div className="bc-overall-label">Overall Band Score</div>
+              <div className="bc-overall-value">
+                {overall != null ? overall.toFixed(1) : '—'}
+              </div>
+              <div className="bc-overall-sub">out of 9.0</div>
+            </div>
+
+            <div className="bc-crit-grid">
+              {criteria.map(c => (
+                <CriterionCard key={c.key} crit={c} value={results.bandScores?.[c.key]} />
+              ))}
+            </div>
+
+            {Array.isArray(results.feedback) && results.feedback.length > 0 && (
+              <div className="bc-feedback">
+                <h3>AI Feedback</h3>
+                <ul>
+                  {results.feedback.map((f, i) => <li key={i}>{f}</li>)}
+                </ul>
+              </div>
+            )}
+
+            <div className="bc-stats">
+              <div className="bc-stat">
+                <div className="bc-stat-value">{results.counts?.words ?? wordCount}</div>
+                <div className="bc-stat-label">Words</div>
+              </div>
+              <div className="bc-stat">
+                <div className="bc-stat-value">{results.counts?.sentences ?? sentenceCount}</div>
+                <div className="bc-stat-label">Sentences</div>
+              </div>
+              <div className="bc-stat">
+                <div className="bc-stat-value">{results.counts?.paragraphs ?? paragraphCount}</div>
+                <div className="bc-stat-label">Paragraphs</div>
+              </div>
+            </div>
+
+            {results.warnings && (
+              <div className="bc-warnings">
+                <strong>Note:</strong> Some AI services returned partial results.
+                <ul>
+                  {Object.entries(results.warnings).map(([k, v]) => <li key={k}>{k}: {v}</li>)}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
+      </main>
+
+      <footer className="bc-footer">
+        <p>BandCheck · IELTS Writing Evaluator · Powered by Hugging Face</p>
+      </footer>
+    </div>
+  );
+}

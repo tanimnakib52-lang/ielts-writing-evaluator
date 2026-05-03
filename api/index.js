@@ -1,326 +1,248 @@
 const express = require('express');
 const cors = require('cors');
-const app = express();
 const multer = require('multer');
 const Tesseract = require('tesseract.js');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
-// For AI scoring (Google Generative AI)
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+const app = express();
 
-// Ensure uploads folder exists
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+// ---------------- Config ----------------
+const HF_TOKEN = process.env.HF_TOKEN;
+const HF_API_BASE = 'https://api-inference.huggingface.co/models';
 
-// Multer upload configuration
-const upload = multer({ dest: path.join(__dirname, 'uploads') });
+const MODELS = {
+  task2_score: 'KevSun/IELTS_essay_scoring',
+  task1_score: 'KevSun/Engessay_grading_ML',
+  feedback:    'KevSun/IELTS_essay_comments',
+};
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// --------- Utility helpers ---------
-const SENTENCE_SPLIT = /(?<=[.!?])\s+(?=[A-Z0-9])/g;
-const WORD_SPLIT = /\[\s]+/g;
-const ALPHA_WORD = /[A-Za-z]+/;
-
-function tokenizeSentences(text) {
-  return text
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(SENTENCE_SPLIT)
-    .filter(s => s.trim().length > 0);
-}
-
-function tokenizeWords(text) {
-  return text
-    .replace(/[()\[\]{},.!?;:"']/g, ' ')
-    .split(WORD_SPLIT)
-    .filter(w => w && ALPHA_WORD.test(w));
-}
-
-function countWords(text) { return tokenizeWords(text).length; }
-function countSentences(text) { return tokenizeSentences(text).length; }
-function countParagraphs(text) { return text.split(/\n\n+/).filter(p => p.trim().length > 0).length; }
-
-function averageWordLength(text) {
-  const words = tokenizeWords(text);
-  if (!words.length) return 0;
-  const total = words.reduce((s, w) => s + w.length, 0);
-  return total / words.length;
-}
-
-function countComplexWords(text) {
-  return tokenizeWords(text).filter(w => w.length >= 7).length;
-}
-// --------- Grammar & style diagnostics ---------
-const FINITE_VERB = /\b(am|is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|may|might|must|shall|should|will|would|'m|'re|'s)\b/i;
-
-function detectFragments(sentences) {
-  return sentences
-    .map((s, idx) => ({ s: s.trim(), idx }))
-    .filter(({ s }) => s.split(WORD_SPLIT).filter(Boolean).length < 5 || !FINITE_VERB.test(s))
-    .map(({ s, idx }) => ({ index: idx, text: s }));
-}
-
-const COORD_CONJ = /\b(and|but|or|nor|for|yet|so)\b/i;
-
-function detectRunOns(sentences) {
-  return sentences
-    .map((s, idx) => ({ s: s.trim(), idx }))
-    .filter(({ s }) => {
-      const clauseLike = s.split(/[,;:]/).map(x => x.trim()).filter(Boolean);
-      const manyClauses = clauseLike.length >= 3;
-      const commaSpliceTwo = clauseLike.length === 2 && !/\b(and|but|or|so|yet)\b/i.test(s);
-      const veryLong = s.split(WORD_SPLIT).length >= 35 && /,/.test(s) && !COORD_CONJ.test(s);
-      return manyClauses || commaSpliceTwo || veryLong;
-    })
-    .map(({ s, idx }) => ({ index: idx, text: s }));
-}
-
-// Detect passive voice with fixed regex using new RegExp
-const IRREG_PP = /\b(written|taken|given|seen|known|made|done|built|bought|thought|found|kept|left|felt|heard|held|led|lost|put|read|said|sent|set|spent|told|understood|won)\b/i;
-function detectPassiveSentences(sentences) {
-  const passiveRegex = new RegExp('\\b(am|is|are|was|were|be|been|being)\\b\\s+(\\w+ed\\b|\\w+en\\b|\\w+n\\b|' + IRREG_PP.source + ')\\b', 'i');
-  return sentences
-    .map((s, idx) => ({ s: s.trim(), idx }))
-    .filter(({ s }) => passiveRegex.test(s))
-    .map(({ s, idx }) => ({ index: idx, text: s }));
-}
-
-function detectActiveSentences(sentences) {
-  return sentences
-    .map((s, idx) => ({ s: s.trim(), idx }))
-    .filter(({ s }) => /\b(I|He|We|You|They|He|She|People|Students|Government|Researchers|It)\b[^.?!]*\b(\w{3,})\b(?!\s*(been|being|be|am|is|are|was|were))\b/i.test(s))
-    .map(({ s, idx }) => ({ index: idx, text: s }));
-}
-// --------- Lexical sophistication ---------
-const ACADEMIC_WORDS = [
-  'moreover', 'however', 'nevertheless', 'consequently', 'furthermore', 'whereas', 'thus', 'therefore',
-  'significantly', 'predominantly', 'notwithstanding', 'albeit', 'paradigm', 'mitigate', 'underpin',
-  'alleviate', 'substantiate', 'robust', 'salient', 'ubiquitous', 'inadvertent'
+// IELTS criterion order returned by KevSun scoring models
+// (Task Response/Achievement, Coherence & Cohesion, Lexical Resource, Grammatical Range & Accuracy, Overall)
+const SCORE_KEYS = [
+  'taskResponse',
+  'coherenceCohesion',
+  'lexicalResource',
+  'grammaticalRange',
+  'overall',
 ];
 
-function analyzeVocabulary(text) {
-  const words = tokenizeWords(text).map(w => w.toLowerCase());
-  const types = new Set(words);
-  const typeTokenRatio = words.length ? types.size / words.length : 0;
-  const academic = words.filter(w => ACADEMIC_WORDS.includes(w));
-  const collocations = (text.match(/\b(play an important role|as a result|in addition to|on the other hand|in contrast|a wide range of)\b/gi) || []).length;
-  return { typeTokenRatio, academicCount: academic.length, collocations };
+// ---------------- Uploads (OCR) ----------------
+const uploadsDir = path.join('/tmp', 'ielts-uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+const upload = multer({ dest: uploadsDir });
+
+// ---------------- Middleware ----------------
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
+
+// ---------------- Helpers ----------------
+function toQuarterBand(score) {
+  if (score == null || isNaN(score)) return null;
+  const clamped = Math.max(0, Math.min(9, Number(score)));
+  return Math.round(clamped * 2) / 2; // round to nearest 0.5 (IELTS bands)
 }
 
-// --------- Scoring model ---------
-function toQuarterBand(score) { return Math.round(score * 4) / 4; }
+function countWords(text) {
+  return (text.match(/\b[\w']+\b/g) || []).length;
+}
+function countSentences(text) {
+  return (text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g) || []).length || (text.trim() ? 1 : 0);
+}
+function countParagraphs(text) {
+  return text.split(/\n\s*\n/).filter(p => p.trim().length).length || (text.trim() ? 1 : 0);
+}
 
-function scoreEssay(text, taskType = 'task2') {
-  const words = tokenizeWords(text);
-  const sentences = tokenizeSentences(text);
-  const paragraphs = text.split(/\n\n+/).filter(p => p.trim()).length;
-
-  const wordCount = words.length;
-  const sentenceCount = sentences.length;
-  const avgSentenceLen = sentenceCount ? wordCount / sentenceCount : 0;
-  const complexWordCount = words.filter(w => w.length >= 7).length;
-
-  const fragments = detectFragments(sentences);
-  const runOns = detectRunOns(sentences);
-  const passive = detectPassiveSentences(sentences);
-  const active = detectActiveSentences(sentences);
-  const vocab = analyzeVocabulary(text);
-
-  // Task Response / Achievement
-  let TR = 6.5;
-  if (wordCount < 180) TR = 5.0;
-  else if (wordCount < 240) TR = 6.0;
-  else if (wordCount <= 320) TR = 7.0;
-  else if (wordCount <= 420) TR = 6.75;
-  else TR = 6.5;
-  if (paragraphs >= 4) TR += 0.25;
-
-  // Coherence & Cohesion
-  let CC = 6.5;
-  const longSentences = sentences.filter(s => s.split(WORD_SPLIT).length > 30).length;
-  const shortSentences = sentences.filter(s => s.split(WORD_SPLIT).length < 6).length;
-  const variation = (longSentences > 0 && shortSentences > 0) ? 1 : 0;
-  CC += variation * 0.5;
-  CC -= Math.min(1.5, runOns.length * 0.3 + fragments.length * 0.2);
-  if (vocab.collocations >= 3) CC += 0.25;
-
-  // Lexical Resource
-  let LR = 6.5;
-  if (vocab.typeTokenRatio > 0.5) LR += 0.5;
-  else if (vocab.typeTokenRatio > 0.4) LR += 0.25;
-  if (complexWordCount / (wordCount || 1) > 0.18) LR += 0.25;
-  LR += Math.min(0.5, vocab.academicCount * 0.1);
-
-  // Grammatical Range & Accuracy
-  let GRA = 6.5;
-  GRA -= Math.min(1.5, fragments.length * 0.2 + runOns.length * 0.3);
-  const passiveRate = sentenceCount ? passive.length / sentenceCount : 0;
-  if (passiveRate > 0.6) GRA -= 0.5;
-  if (passiveRate < 0.15 && active.length > 0) GRA += 0.25;
-  if (averageWordLength(text) >= 4.8) GRA += 0.25;
-
-  // Clamp and round
-  TR = toQuarterBand(Math.max(0, Math.min(9, TR)));
-  CC = toQuarterBand(Math.max(0, Math.min(9, CC)));
-  LR = toQuarterBand(Math.max(0, Math.min(9, LR)));
-  GRA = toQuarterBand(Math.max(0, Math.min(9, GRA)));
-  const overall = toQuarterBand(Math.round(((TR + CC + LR + GRA) / 4) * 4) / 4);
-
-  return {
-    counts: { words: wordCount, sentences: sentenceCount, paragraphs },
-    features: { avgSentenceLen, complexWordCount, fragments, runOns, passive, active, vocab, avgWordLen: averageWordLength(text) },
-    bandScores: {
-      ...(taskType === 'task1' ? { taskAchievement: TR } : { taskResponse: TR }),
-      coherenceCohesion: CC,
-      lexicalResource: LR,
-      grammaticalRange: GRA,
-      overall
+// Call HF Inference API with retries on cold-start (503)
+async function hfCall(modelId, inputs, { maxRetries = 2 } = {}) {
+  if (!HF_TOKEN) throw new Error('HF_TOKEN not configured on server');
+  const url = `${HF_API_BASE}/${modelId}`;
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ inputs, options: { wait_for_model: true } }),
+      });
+      const text = await resp.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      if (!resp.ok) {
+        // 503 = model loading, retry
+        if (resp.status === 503 && attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        throw new Error(`HF ${modelId} ${resp.status}: ${typeof data === 'string' ? data : JSON.stringify(data)}`);
+      }
+      return data;
+    } catch (e) {
+      lastErr = e;
+      if (attempt >= maxRetries) throw e;
+      await new Promise(r => setTimeout(r, 1500));
     }
-  };
-}
-
-// --------- Feedback generation ---------
-function examplesForIssue(key) {
-  switch (key) {
-    case 'runOns':
-      return ['Original: I love reading, it makes me calm. -> Fix: I love reading because it makes me calm.'];
-    case 'fragments':
-      return ['Fragment: Because technology is advancing. -> Fix: Because technology is advancing, many jobs are being automated.'];
-    case 'passive':
-      return ['Passive: The policy was implemented by the council. -> Active: The council implemented the policy.'];
-    case 'lexical':
-      return ['Upgrade: good -> beneficial/constructive; bad -> detrimental/adverse'];
-    default:
-      return [];
   }
+  throw lastErr;
 }
 
-function buildFeedback(text) {
-  const sentences = tokenizeSentences(text);
-  const analysis = scoreEssay(text);
-  const fb = [];
+// Parse KevSun scoring output -> { taskResponse, coherenceCohesion, lexicalResource, grammaticalRange, overall }
+function parseScores(raw) {
+  // Possible shapes:
+  //   [[{label:"LABEL_0", score:0.x}, ...]]   (multi-label classification)
+  //   [{label, score}, ...]
+  //   { scores: [..] }
+  let arr = raw;
+  if (arr && Array.isArray(arr) && Array.isArray(arr[0])) arr = arr[0];
 
-  if (analysis.counts.words < 240) fb.push('Aim for at least 250 words; add one supporting example in a body paragraph.');
-  if (analysis.features.runOns.length) fb.push('Fix run-on sentences. Try subordinators like "because/although" or use a period.');
-  if (analysis.features.fragments.length) fb.push('Complete sentence fragments. Ensure each sentence has a subject and a finite verb.');
-
-  const passiveRate = analysis.counts.sentences ? analysis.features.passive.length / analysis.counts.sentences : 0;
-  if (passiveRate > 0.5) fb.push('Reduce heavy passive voice. Prefer clear agents: "The government should invest..."');
-  if (analysis.features.vocab.typeTokenRatio < 0.42) fb.push('Increase lexical variety; replace repeated words and add precise synonyms.');
-  if (analysis.features.vocab.collocations < 2) fb.push('Add cohesive phrases: "as a result", "on the other hand", "in contrast".');
-
-  if (analysis.features.runOns.length) fb.push(...examplesForIssue('runOns'));
-  if (analysis.features.fragments.length) fb.push(...examplesForIssue('fragments'));
-  if (passiveRate > 0.5) fb.push(...examplesForIssue('passive'));
-  fb.push(...examplesForIssue('lexical'));
-
-  return fb.slice(0, 10);
-}
-
-// --------- API Endpoints ---------
-app.post('/evaluate', (req, res) => {
-  const { essay = '', taskType = 'task2' } = req.body || {};
-  const text = String(essay || '').replace(/\r/g, '\n');
-  const result = scoreEssay(text, taskType);
-  const feedback = buildFeedback(text);
-  res.json({ ...result, feedback });
-});
-
-app.get('/health', (_, res) => res.json({ ok: true }));
-
-// OCR Endpoint
-app.post('/ocr-evaluate', upload.single('essayImage'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No image file provided' });
-    }
-    const imagePath = req.file.path;
-
-    // Run OCR
-    const result = await Tesseract.recognize(imagePath, 'eng', {
-      logger: m => console.log(m)
+  const bands = {};
+  if (Array.isArray(arr) && arr.length && typeof arr[0] === 'object' && 'score' in arr[0]) {
+    // KevSun models output 5 scores in fixed order, scaled 0..1 -> map to 0..9
+    arr.forEach((item, i) => {
+      const key = SCORE_KEYS[i];
+      if (!key) return;
+      let v = Number(item.score);
+      // KevSun score is typically already 0..1; scale to 0..9
+      if (v <= 1) v = v * 9;
+      bands[key] = toQuarterBand(v);
     });
+  }
 
-    // Clean up uploaded file
-    fs.unlink(imagePath, () => {});
+  // If overall missing, average the 4 criteria
+  if (bands.overall == null) {
+    const vals = ['taskResponse', 'coherenceCohesion', 'lexicalResource', 'grammaticalRange']
+      .map(k => bands[k]).filter(v => v != null);
+    if (vals.length) {
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      bands.overall = toQuarterBand(avg);
+    }
+  }
+  return bands;
+}
+
+// Parse KevSun/IELTS_essay_comments output -> array of feedback strings
+function parseFeedback(raw) {
+  if (!raw) return [];
+  // Common HF text-generation shape: [{ generated_text: "..." }]
+  if (Array.isArray(raw) && raw[0] && typeof raw[0].generated_text === 'string') {
+    return splitFeedback(raw[0].generated_text);
+  }
+  if (typeof raw === 'string') return splitFeedback(raw);
+  if (raw.generated_text) return splitFeedback(raw.generated_text);
+  // Classification-like fallback
+  if (Array.isArray(raw)) {
+    return raw
+      .map(x => (x && (x.label || x.generated_text)) || null)
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function splitFeedback(text) {
+  return text
+    .replace(/\r/g, '')
+    .split(/\n+|(?:\d+\.\s)|(?:•\s)|(?:-\s)/)
+    .map(s => s.trim())
+    .filter(s => s.length > 4)
+    .slice(0, 12);
+}
+
+// ---------------- /evaluate (HF-powered) ----------------
+async function evaluateHandler(req, res) {
+  try {
+    const body = req.body || {};
+    // Backwards-compat: accept "task" OR legacy "taskType"
+    const taskRaw = String(body.task || body.taskType || 'task2').toLowerCase();
+    const task = taskRaw === 'task1' ? 'task1' : 'task2';
+    const essay = String(body.essay || '').replace(/\r/g, '\n').trim();
+    const topic = String(body.topic || '').trim();
+
+    if (!essay || essay.length < 20) {
+      return res.status(400).json({ error: 'Essay text is required (min 20 chars).' });
+    }
+    if (!HF_TOKEN) {
+      return res.status(500).json({ error: 'HF_TOKEN environment variable is not set on the server.' });
+    }
+
+    const scoreModel = task === 'task1' ? MODELS.task1_score : MODELS.task2_score;
+    const feedbackModel = MODELS.feedback;
+
+    // Build inputs
+    const scoreInput = essay;
+    const feedbackInput = topic
+      ? `Topic: ${topic}\n\nEssay:\n${essay}`
+      : essay;
+
+    // Run scoring + feedback in parallel
+    const [scoreRaw, feedbackRaw] = await Promise.all([
+      hfCall(scoreModel, scoreInput).catch(e => ({ __error: e.message })),
+      hfCall(feedbackModel, feedbackInput).catch(e => ({ __error: e.message })),
+    ]);
+
+    const errors = {};
+    if (scoreRaw && scoreRaw.__error) errors.scoring = scoreRaw.__error;
+    if (feedbackRaw && feedbackRaw.__error) errors.feedback = feedbackRaw.__error;
+
+    const bands = scoreRaw && !scoreRaw.__error ? parseScores(scoreRaw) : {};
+    const feedback = feedbackRaw && !feedbackRaw.__error ? parseFeedback(feedbackRaw) : [];
+
+    // Rename TR -> taskAchievement when task1, for clarity in response
+    const bandScores = { ...bands };
+    if (task === 'task1' && bandScores.taskResponse != null) {
+      bandScores.taskAchievement = bandScores.taskResponse;
+      delete bandScores.taskResponse;
+    }
+
+    const counts = {
+      words: countWords(essay),
+      sentences: countSentences(essay),
+      paragraphs: countParagraphs(essay),
+    };
 
     return res.json({
-      success: true,
-      text: result.data.text
+      task,
+      bandScores,
+      feedback,
+      counts,
+      ...(Object.keys(errors).length ? { warnings: errors } : {}),
     });
+  } catch (err) {
+    console.error('evaluate error:', err);
+    return res.status(500).json({ error: 'Evaluation failed', message: err.message });
+  }
+}
+app.post('/evaluate', evaluateHandler);
+app.post('/api/evaluate', evaluateHandler);
+
+// ---------------- Health ----------------
+const healthHandler = (_, res) => res.json({ ok: true, hf: !!HF_TOKEN });
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
+
+// ---------------- OCR (kept) ----------------
+async function ocrHandler(req, res) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+    const imagePath = req.file.path;
+    const result = await Tesseract.recognize(imagePath, 'eng');
+    fs.unlink(imagePath, () => {});
+    return res.json({ success: true, text: result.data.text });
   } catch (err) {
     console.error('OCR error:', err);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to run OCR on image',
-      message: err.message
-    });
+    return res.status(500).json({ success: false, error: 'Failed to run OCR on image', message: err.message });
   }
-});
-
-// AI-Based Scoring Endpoint
-app.post('/ai-evaluate', async (req, res) => {
-  try {
-    const { essay, taskType } = req.body;
-
-    if (!essay || typeof essay !== 'string') {
-      return res.status(400).json({ error: 'Essay text is required' });
-    }
-
-    if (!process.env.GOOGLE_API_KEY) {
-      return res.status(500).json({ error: 'Google Gemini API key not configured' });
-    }
-
-    const prompt = `You are an official IELTS writing examiner. Evaluate the following IELTS ${taskType === 'task1' ? 'Task 1' : 'Task 2'} essay.
-
-Give:
-1) Band scores (1-9) for: Task Achievement/Response, Coherence & Cohesion, Lexical Resource, Grammatical Range & Accuracy
-2) An overall band (1-9)
-3) A short list of strengths
-4) A short list of weaknesses
-5) Actionable suggestions.
-
-Return JSON only in this format:
-{
-  "bands": { "taskAchievement": number, "coherenceCohesion": number, "lexicalResource": number, "grammaticalRangeAccuracy": number, "overall": number },
-  "strengths": [string],
-  "weaknesses": [string],
-  "suggestions": [string]
 }
+app.post('/ocr-evaluate', upload.single('essayImage'), ocrHandler);
+app.post('/api/ocr-evaluate', upload.single('essayImage'), ocrHandler);
 
-Essay: "${essay}"`;
-
-    // Fixed: Use gemini-1.5-flash instead of deprecated gemini-pro
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text();
-
-    // Fixed: Strip markdown code fences before JSON parsing
-    text = text.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
-
-    const json = JSON.parse(text);
-    return res.json({ success: true, ...json });
-  } catch (err) {
-    console.error('AI evaluate error:', err);
-    return res.status(500).json({
-      success: false,
-      error: 'AI evaluation failed',
-      message: err.message
-    });
-  }
-});
-
-// --------- Start Server ---------
+// ---------------- Server ----------------
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`IELTS Evaluator API running at http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`IELTS Evaluator API running at http://localhost:${PORT}`));
+}
 
 module.exports = app;
