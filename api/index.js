@@ -10,7 +10,7 @@ const app = express();
 
 // ---------------- Config ----------------
 const HF_TOKEN = process.env.HF_TOKEN;
-const HF_API_BASE = 'https://api-inference.huggingface.co/models';
+const HF_API_BASE = 'https://router.huggingface.co/hf-inference/models';
 
 const MODELS = {
   task2_score: 'KevSun/IELTS_essay_scoring',
