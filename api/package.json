@@ -1,7 +1,7 @@
 {
   "name": "ielts-writing-evaluator-api",
   "version": "4.0.0",
-  "description": "BandCheck IELTS Writing Evaluation API powered by Hugging Face (KevSun/IELTS_essay_scoring)",
+  "description": "BandCheck IELTS Writing Evaluation API — Hugging Face zero-shot scoring with FacebookAI/roberta-large-mnli",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

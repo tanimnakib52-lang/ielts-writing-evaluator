@@ -1,12 +1,16 @@
 /**
  * BandCheck IELTS Writing Evaluator API
- * Scoring: KevSun/IELTS_essay_scoring  (5 dimensions: TA, CC, V, G, Overall)
- * Feedback (optional): KevSun/IELTS_essay_comments
+ *
+ * Scoring is done by zero-shot classification against
+ *   FacebookAI/roberta-large-mnli
+ * via the Hugging Face Inference API (zero-shot-classification pipeline).
+ *
+ * No KevSun/* models are used anywhere in this file.
  *
  * Endpoints:
  *   POST /evaluate         body: { task: "task1"|"task2", topic?: string, essay: string }
  *   POST /api/evaluate     (same)
- *   GET  /health           { ok, hf }
+ *   GET  /health           { ok, hf, model }
  *   GET  /api/health
  */
 
@@ -20,60 +24,42 @@ app.use(express.json({ limit: '2mb' }));
 
 // ---------------- Config ----------------
 const HF_TOKEN = process.env.HF_TOKEN;
+const MODEL = 'FacebookAI/roberta-large-mnli';
 
-const SCORING_MODEL = 'KevSun/IELTS_essay_scoring';
-const FEEDBACK_MODEL = 'KevSun/IELTS_essay_comments';
-
-// Try the new router URL first, then the legacy endpoint
+// Try the new router URL first, then the legacy endpoint as a fallback.
 const HF_URLS = (model) => [
   `https://router.huggingface.co/hf-inference/models/${model}`,
-  `https://router.huggingface.co/hf-inference/models/${model}/pipeline/text-classification`,
   `https://api-inference.huggingface.co/models/${model}`,
 ];
 
-// Fixed dimension order returned by KevSun/IELTS_essay_scoring
-// (see model card https://huggingface.co/KevSun/IELTS_essay_scoring)
-const SCORE_DIMENSIONS = [
-  'Task Achievement',
-  'Coherence and Cohesion',
-  'Vocabulary',
-  'Grammar',
-  'Overall',
-];
-
-// Map model dimensions to the keys the existing frontend expects
-const KEY_MAP_TASK2 = {
-  'Task Achievement': 'taskResponse',          // Task 2 uses "Task Response"
-  'Coherence and Cohesion': 'coherenceCohesion',
-  'Vocabulary': 'lexicalResource',
-  'Grammar': 'grammaticalRange',
-  'Overall': 'overall',
-};
-const KEY_MAP_TASK1 = {
-  'Task Achievement': 'taskAchievement',
-  'Coherence and Cohesion': 'coherenceCohesion',
-  'Vocabulary': 'lexicalResource',
-  'Grammar': 'grammaticalRange',
-  'Overall': 'overall',
-};
-
 // ---------------- Helpers ----------------
-function toHalfBand(s) {
-  if (s == null || isNaN(s)) return null;
-  return Math.round(Math.max(0, Math.min(9, Number(s))) * 2) / 2;
-}
 const countWords = (t) => (t.match(/\b[\w']+\b/g) || []).length;
 const countSentences = (t) =>
   (t.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g) || []).length || (t.trim() ? 1 : 0);
 const countParagraphs = (t) =>
   t.split(/\n\s*\n/).filter((p) => p.trim().length).length || (t.trim() ? 1 : 0);
 
-// ---------------- HF call ----------------
-async function hfCall(model, inputs, { timeoutMs = 45000 } = {}) {
+const toHalfBand = (s) => {
+  if (s == null || isNaN(s)) return null;
+  return Math.round(Math.max(0, Math.min(9, Number(s))) * 2) / 2;
+};
+
+// ---------------- HF zero-shot call ----------------
+/**
+ * Call HF zero-shot-classification.
+ *
+ * @param {string} text       - essay text (truncated to ~3500 chars to stay under model max)
+ * @param {string[]} labels   - candidate labels
+ * @param {boolean} multi     - multi_label mode (independent probabilities per label)
+ * @returns {{labels:string[], scores:number[]}}
+ */
+async function zeroShot(text, labels, { multi = false, timeoutMs = 35000 } = {}) {
   if (!HF_TOKEN) throw new Error('HF_TOKEN is not set on the server');
 
+  const safeText = String(text || '').slice(0, 3500);
   const body = JSON.stringify({
-    inputs,
+    inputs: safeText,
+    parameters: { candidate_labels: labels, multi_label: multi },
     options: { wait_for_model: true, use_cache: true },
   });
 
@@ -83,118 +69,173 @@ async function hfCall(model, inputs, { timeoutMs = 45000 } = {}) {
   };
 
   const errors = [];
-  for (const url of HF_URLS(model)) {
+  for (const url of HF_URLS(MODEL)) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
         const resp = await fetch(url, { method: 'POST', headers, body, signal: ctrl.signal });
         clearTimeout(t);
-        const text = await resp.text();
+        const raw = await resp.text();
         let data;
         try {
-          data = JSON.parse(text);
+          data = JSON.parse(raw);
         } catch {
-          data = text;
+          data = raw;
         }
         if (resp.status === 503 && attempt === 0) {
           await new Promise((r) => setTimeout(r, 2500));
           continue;
         }
         if (!resp.ok) {
-          const snippet = typeof data === 'string' ? data.slice(0, 200) : JSON.stringify(data).slice(0, 200);
+          const snippet =
+            typeof data === 'string' ? data.slice(0, 180) : JSON.stringify(data).slice(0, 180);
           errors.push(`${resp.status} @ ${url.split('/').slice(-3).join('/')}: ${snippet}`);
-          break; // try next URL
+          break;
         }
-        return data;
+        // Expected shape: { sequence, labels:[...], scores:[...] }
+        if (data && Array.isArray(data.labels) && Array.isArray(data.scores)) {
+          return { labels: data.labels, scores: data.scores };
+        }
+        errors.push(`unexpected response shape: ${JSON.stringify(data).slice(0, 180)}`);
+        break;
       } catch (e) {
         clearTimeout(t);
         errors.push(`EXC @ ${url.split('/').slice(-3).join('/')}: ${e.message}`);
       }
     }
   }
-  throw new Error(`HF call failed for ${model}. Tried: ${errors.join(' | ')}`);
+  throw new Error(`zero-shot call failed. tried: ${errors.join(' | ')}`);
 }
 
-// ---------------- Parsing ----------------
+// ---------------- Scoring logic ----------------
+
 /**
- * Parse the scoring response from KevSun/IELTS_essay_scoring.
+ * Convert a {labels, scores} result into an expected-value band score.
+ * Each label is mapped to a numeric band; we compute sum(score_i * band_i).
  *
- * Likely response shapes:
- *   1) [[{label:"LABEL_0", score:0.x}, {label:"LABEL_1", score:0.x}, ...]]
- *   2) [{label, score}, ...]
- *   3) An object with "logits" or "scores" array
- *
- * Per the model card, raw scores are normalized by:
- *     normalized = (raw / max(raw)) * 9
- * then rounded to nearest 0.5.
+ * @param {{labels:string[], scores:number[]}} result
+ * @param {Record<string, number>} labelToBand
+ * @returns {number} expected band, half-rounded
  */
-function parseScores(raw) {
-  let arr = raw;
-  if (arr && typeof arr === 'object' && Array.isArray(arr.logits)) arr = arr.logits;
-  if (Array.isArray(arr) && Array.isArray(arr[0])) arr = arr[0];
-
-  let values = [];
-  if (Array.isArray(arr)) {
-    if (arr.length && typeof arr[0] === 'object' && arr[0] && 'score' in arr[0]) {
-      // Sort by LABEL_N index when labels look like "LABEL_0", "LABEL_1", ...
-      const looksLabeled =
-        arr.every((x) => typeof x.label === 'string' && /^LABEL_\d+$/.test(x.label)) ||
-        arr.every((x) => typeof x.label === 'string' && /^\d+$/.test(x.label));
-      const ordered = looksLabeled
-        ? [...arr].sort((a, b) => {
-            const ia = parseInt(String(a.label).replace(/\D/g, ''), 10);
-            const ib = parseInt(String(b.label).replace(/\D/g, ''), 10);
-            return ia - ib;
-          })
-        : arr;
-      values = ordered.map((x) => Number(x.score));
-    } else if (arr.every((x) => typeof x === 'number')) {
-      values = arr.map(Number);
-    }
+function expectedBand(result, labelToBand) {
+  if (!result || !Array.isArray(result.labels) || !result.labels.length) return null;
+  let totalWeight = 0;
+  let totalProb = 0;
+  for (let i = 0; i < result.labels.length; i++) {
+    const lbl = result.labels[i];
+    const p = Number(result.scores[i]) || 0;
+    const band = labelToBand[lbl];
+    if (band == null) continue;
+    totalWeight += p * band;
+    totalProb += p;
   }
+  if (totalProb === 0) return null;
+  return toHalfBand(totalWeight / totalProb);
+}
 
-  if (!values.length) return null;
+/**
+ * Convert a strong-vs-weak binary zero-shot result into a band score.
+ * If P(strong) -> band ~7.5 and P(weak) -> band ~5.0, linearly interpolate.
+ *
+ * @param {{labels:string[], scores:number[]}} result
+ * @param {string} strongLabel
+ * @returns {number}
+ */
+function strengthToBand(result, strongLabel) {
+  if (!result) return null;
+  const idx = result.labels.findIndex((l) => l === strongLabel);
+  if (idx === -1) return null;
+  const pStrong = Math.max(0, Math.min(1, Number(result.scores[idx]) || 0));
+  // Map strong-probability in [0..1] to band in [4.5..8.0]
+  const band = 4.5 + pStrong * 3.5;
+  return toHalfBand(band);
+}
 
-  // Apply the model card's normalization: (v / max) * 9
-  const max = Math.max(...values);
-  let normalized;
-  if (max > 0 && max <= 1.0001) {
-    // Already in 0..1 range (typical classifier softmax-like). Normalize as per card.
-    normalized = values.map((v) => (v / max) * 9);
-  } else if (max > 1 && max <= 9.01) {
-    // Already in band-scale roughly
-    normalized = values.map((v) => v);
+// Overall band candidate labels and their numeric values
+const OVERALL_LABELS = [
+  'overall band 5',
+  'overall band 6',
+  'overall band 7',
+  'overall band 8',
+];
+const OVERALL_TO_BAND = {
+  'overall band 5': 5,
+  'overall band 6': 6,
+  'overall band 7': 7,
+  'overall band 8': 8,
+};
+
+// Build a feedback list from the criterion scores
+function buildFeedback(task, scores, counts) {
+  const minWords = task === 'task1' ? 150 : 250;
+  const items = [];
+  const strengths = [];
+  const improvements = [];
+
+  const pairs = [
+    ['Task response', scores.taskResponse],
+    ['Coherence and cohesion', scores.coherenceCohesion],
+    ['Vocabulary', scores.lexicalResource],
+    ['Grammar', scores.grammaticalRange],
+  ];
+
+  pairs.forEach(([name, v]) => {
+    if (v == null) return;
+    if (v >= 7) strengths.push(`${name} is strong (band ${v.toFixed(1)}).`);
+    else if (v >= 6) strengths.push(`${name} is solid (band ${v.toFixed(1)}).`);
+    else improvements.push(`${name} needs work — currently around band ${v.toFixed(1)}.`);
+  });
+
+  if (counts.words < minWords) {
+    improvements.push(`Your response is ${counts.words} words; the target is at least ${minWords}.`);
   } else {
-    // Generic logits — fall back to (v / max) * 9
-    normalized = values.map((v) => (v / max) * 9);
+    strengths.push(`Word count is healthy (${counts.words} words).`);
   }
 
-  return normalized.slice(0, SCORE_DIMENSIONS.length).map(toHalfBand);
+  if (counts.paragraphs < 3) {
+    improvements.push('Use clearer paragraphing — introduction, body, conclusion.');
+  } else {
+    strengths.push(`Clear paragraph structure (${counts.paragraphs} paragraphs).`);
+  }
+
+  // Generic top-level summary line
+  if (scores.overall != null) {
+    items.push(
+      `Estimated overall band: ${scores.overall.toFixed(1)}. ` +
+        (scores.overall >= 7
+          ? 'Good performance overall — focus on refining nuance and accuracy.'
+          : scores.overall >= 6
+          ? 'Competent overall — targeted practice on weak criteria can lift your band.'
+          : 'There are several areas to improve before test day; see suggestions below.')
+    );
+  }
+
+  return {
+    feedback: [...items, ...strengths.map((s) => `Strength: ${s}`), ...improvements.map((s) => `Improve: ${s}`)],
+    strengths,
+    improvements,
+  };
 }
 
-/**
- * Parse the feedback response from KevSun/IELTS_essay_comments.
- * Common shapes:
- *   [{ generated_text: "..." }]
- *   { generated_text: "..." }
- *   "...." (raw string)
- */
-function parseFeedback(raw) {
-  if (!raw) return [];
-  let text = '';
-  if (typeof raw === 'string') text = raw;
-  else if (Array.isArray(raw) && raw[0]?.generated_text) text = raw[0].generated_text;
-  else if (raw?.generated_text) text = raw.generated_text;
-  else if (Array.isArray(raw) && typeof raw[0] === 'string') text = raw[0];
-  if (!text) return [];
-
-  return text
-    .replace(/\r/g, '')
-    .split(/\n+|(?:\d+\.\s)|(?:•\s)|(?:- )/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 4)
-    .slice(0, 8);
+// Map model dimensions to the keys the existing frontend expects
+function toFrontendShape(task, est) {
+  if (task === 'task1') {
+    return {
+      taskAchievement: est.task_response,
+      coherenceCohesion: est.coherence_cohesion,
+      lexicalResource: est.lexical_resource,
+      grammaticalRange: est.grammatical_range_accuracy,
+      overall: est.overall_band,
+    };
+  }
+  return {
+    taskResponse: est.task_response,
+    coherenceCohesion: est.coherence_cohesion,
+    lexicalResource: est.lexical_resource,
+    grammaticalRange: est.grammatical_range_accuracy,
+    overall: est.overall_band,
+  };
 }
 
 // ---------------- Handler ----------------
@@ -215,56 +256,57 @@ async function evaluateHandler(req, res) {
         .json({ error: 'Server is missing the HF_TOKEN environment variable.' });
     }
 
-    const feedbackInput = topic ? `Topic: ${topic}\n\nEssay:\n${essay}` : essay;
+    // For the task-response classifier, include the topic if provided.
+    const taskResponseInput = topic ? `Topic: ${topic}\n\nEssay:\n${essay}` : essay;
 
-    // Parallel: scoring (required) + feedback (optional)
-    const [scoreRes, feedbackRes] = await Promise.allSettled([
-      hfCall(SCORING_MODEL, essay),
-      hfCall(FEEDBACK_MODEL, feedbackInput),
-    ]);
+    // Run all 5 zero-shot calls in parallel
+    const calls = [
+      zeroShot(essay, OVERALL_LABELS, { multi: false }),
+      zeroShot(essay, ['grammar weak', 'grammar strong'], { multi: false }),
+      zeroShot(essay, ['coherence weak', 'coherence strong'], { multi: false }),
+      zeroShot(essay, ['vocabulary weak', 'vocabulary strong'], { multi: false }),
+      zeroShot(taskResponseInput, ['task response weak', 'task response strong'], { multi: false }),
+    ];
+    const settled = await Promise.allSettled(calls);
+    const [overallR, grammarR, coherenceR, vocabR, taskR] = settled;
 
-    if (scoreRes.status !== 'fulfilled') {
-      const msg = scoreRes.reason?.message || 'Unknown error from Hugging Face';
-      console.error('Scoring failed:', msg);
-      const looksLikePerms =
-        /sufficient permissions|Inference Providers|401|403/i.test(msg);
-      return res.status(502).json({
-        error: 'Scoring model failed',
-        message: looksLikePerms
-          ? 'The HF_TOKEN on the server is missing the "Make calls to Inference Providers" permission. Open https://huggingface.co/settings/tokens, edit the token, enable that permission (and "Read access to public repos"), save, then update HF_TOKEN in Vercel and redeploy.'
-          : msg,
-        detail: msg,
-      });
+    // Log which model is in use (helps you confirm in Vercel logs)
+    console.log(`[evaluate] task=${task} model=${MODEL} essay_words=${countWords(essay)}`);
+
+    const anyOk = settled.some((r) => r.status === 'fulfilled');
+    if (!anyOk) {
+      console.error(
+        '[evaluate] all zero-shot calls failed:',
+        settled.map((r) => r.reason?.message).join(' | ')
+      );
+      return res.status(200).json(buildFallback(task, essay, 'Scoring service is temporarily unavailable.'));
     }
 
-    const numericScores = parseScores(scoreRes.value);
-    if (!numericScores || numericScores.length < 5) {
-      console.error('Could not parse scores. Raw:', JSON.stringify(scoreRes.value).slice(0, 500));
-      return res.status(502).json({
-        error: 'Could not parse scoring model output',
-        raw: JSON.stringify(scoreRes.value).slice(0, 500),
-      });
+    const overall =
+      overallR.status === 'fulfilled' ? expectedBand(overallR.value, OVERALL_TO_BAND) : null;
+    const taskResponse =
+      taskR.status === 'fulfilled' ? strengthToBand(taskR.value, 'task response strong') : null;
+    const coherence =
+      coherenceR.status === 'fulfilled' ? strengthToBand(coherenceR.value, 'coherence strong') : null;
+    const vocabulary =
+      vocabR.status === 'fulfilled' ? strengthToBand(vocabR.value, 'vocabulary strong') : null;
+    const grammar =
+      grammarR.status === 'fulfilled' ? strengthToBand(grammarR.value, 'grammar strong') : null;
+
+    // Compute final overall: prefer model's overall band; otherwise average the 4 criteria
+    let finalOverall = overall;
+    if (finalOverall == null) {
+      const arr = [taskResponse, coherence, vocabulary, grammar].filter((v) => v != null);
+      if (arr.length) finalOverall = toHalfBand(arr.reduce((a, b) => a + b, 0) / arr.length);
     }
 
-    const keyMap = task === 'task1' ? KEY_MAP_TASK1 : KEY_MAP_TASK2;
-    const bandScores = {};
-    SCORE_DIMENSIONS.forEach((dim, i) => {
-      bandScores[keyMap[dim]] = numericScores[i];
-    });
-
-    let feedback = [];
-    let warnings;
-    if (feedbackRes.status === 'fulfilled') {
-      feedback = parseFeedback(feedbackRes.value);
-    } else {
-      warnings = { feedback: feedbackRes.reason?.message || 'feedback model unavailable' };
-      console.warn('Feedback failed:', feedbackRes.reason?.message);
-    }
-
-    // Helpful fallback if feedback model returns nothing usable
-    if (feedback.length === 0) {
-      feedback = buildFallbackFeedback(task, bandScores, essay);
-    }
+    const est = {
+      overall_band: finalOverall,
+      task_response: taskResponse,
+      coherence_cohesion: coherence,
+      lexical_resource: vocabulary,
+      grammatical_range_accuracy: grammar,
+    };
 
     const counts = {
       words: countWords(essay),
@@ -272,40 +314,73 @@ async function evaluateHandler(req, res) {
       paragraphs: countParagraphs(essay),
     };
 
+    const bandScores = toFrontendShape(task, est);
+    const { feedback, strengths, improvements } = buildFeedback(task, bandScores, counts);
+
+    // Surface partial-failure as a non-fatal warning
+    const warnings = {};
+    const labelMap = ['overall', 'grammar', 'coherence', 'vocabulary', 'task_response'];
+    settled.forEach((r, i) => {
+      if (r.status === 'rejected') warnings[labelMap[i]] = 'classifier unavailable';
+    });
+
     return res.json({
       task,
-      bandScores,
+      bandScores,        // frontend-shape (preserves React app compatibility)
+      estimate: est,     // requested IELTS-style snake_case shape
       feedback,
+      strengths,
+      improvements,
       counts,
-      model: { scoring: SCORING_MODEL, feedback: FEEDBACK_MODEL },
-      ...(warnings ? { warnings } : {}),
+      model: MODEL,
+      ...(Object.keys(warnings).length ? { warnings } : {}),
     });
   } catch (err) {
-    console.error('evaluate error:', err);
-    return res.status(500).json({ error: 'Evaluation failed', message: err.message });
+    // Never leak raw HF errors to the frontend
+    console.error('[evaluate] fatal:', err?.message);
+    return res
+      .status(200)
+      .json(buildFallback(req.body?.task || 'task2', String(req.body?.essay || ''), 'Could not reach the scoring service. Please try again in a moment.'));
   }
 }
 
-function buildFallbackFeedback(task, bands, essay) {
-  const tips = [];
+// Readable fallback when scoring is unavailable
+function buildFallback(taskRaw, essayRaw, reason) {
+  const task = String(taskRaw).toLowerCase() === 'task1' ? 'task1' : 'task2';
+  const essay = String(essayRaw || '');
+  const counts = {
+    words: countWords(essay),
+    sentences: countSentences(essay),
+    paragraphs: countParagraphs(essay),
+  };
   const minWords = task === 'task1' ? 150 : 250;
-  const wc = countWords(essay);
-  if (wc < minWords) tips.push(`Your response is ${wc} words; aim for at least ${minWords}.`);
+  const improvements = [];
+  if (counts.words < minWords) improvements.push(`Aim for at least ${minWords} words (you wrote ${counts.words}).`);
+  if (counts.paragraphs < 3) improvements.push('Use clear paragraphs — introduction, body, conclusion.');
+  if (improvements.length === 0) improvements.push('Vary sentence structure and add cohesive linkers.');
 
-  const pairs = [
-    ['Task Achievement / Response', bands.taskResponse ?? bands.taskAchievement],
-    ['Coherence & Cohesion', bands.coherenceCohesion],
-    ['Vocabulary', bands.lexicalResource],
-    ['Grammar', bands.grammaticalRange],
-  ];
-  pairs
-    .filter(([, v]) => v != null && v < 6.5)
-    .forEach(([name, v]) => tips.push(`${name} is at ${v.toFixed(1)} — focus on this area to lift your band.`));
+  const bandScores =
+    task === 'task1'
+      ? { taskAchievement: null, coherenceCohesion: null, lexicalResource: null, grammaticalRange: null, overall: null }
+      : { taskResponse: null, coherenceCohesion: null, lexicalResource: null, grammaticalRange: null, overall: null };
 
-  if (countParagraphs(essay) < 3) tips.push('Use clearer paragraphing — introduction, body, and conclusion.');
-  if (tips.length === 0)
-    tips.push('Strong overall performance — keep practising with a range of topics to maintain consistency.');
-  return tips;
+  return {
+    task,
+    bandScores,
+    estimate: {
+      overall_band: null,
+      task_response: null,
+      coherence_cohesion: null,
+      lexical_resource: null,
+      grammatical_range_accuracy: null,
+    },
+    feedback: [reason || 'Scoring service is temporarily unavailable.', ...improvements.map((s) => `Improve: ${s}`)],
+    strengths: [],
+    improvements,
+    counts,
+    model: MODEL,
+    warnings: { scoring: reason || 'unavailable' },
+  };
 }
 
 // ---------------- Routes ----------------
@@ -313,14 +388,14 @@ app.post('/evaluate', evaluateHandler);
 app.post('/api/evaluate', evaluateHandler);
 
 const healthHandler = (_, res) =>
-  res.json({ ok: true, hf: !!HF_TOKEN, scoring: SCORING_MODEL, feedback: FEEDBACK_MODEL });
+  res.json({ ok: true, hf: !!HF_TOKEN, model: MODEL });
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
 // ---------------- Server ----------------
 const PORT = process.env.PORT || 3001;
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`BandCheck API on port ${PORT}`));
+  app.listen(PORT, () => console.log(`BandCheck API on port ${PORT} — model: ${MODEL}`));
 }
 
 module.exports = app;
