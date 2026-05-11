@@ -459,3 +459,28 @@ body {
   .bc-tab { flex: 1; padding: 10px 12px; }
   .bc-textarea { min-height: 240px; }
 }
+
+
+/* ---------- Footer Author ---------- */
+.bc-footer {
+  text-align: center;
+  padding: 22px 24px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.bc-footer-brand {
+  margin-bottom: 6px;
+}
+.bc-footer-author {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+.bc-author-name {
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: 0.1em;
+}
