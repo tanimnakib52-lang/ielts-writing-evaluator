@@ -8,19 +8,15 @@ const TASK_COPY = {
     label: 'Task 2',
     minWords: 250,
     topicLabel: 'Essay Question / Topic',
-    topicPlaceholder:
-      'e.g., Some people think that universities should provide free education. To what extent do you agree or disagree?',
-    essayPlaceholder:
-      'Paste or type your IELTS Task 2 essay here. Aim for at least 250 words across an introduction, two body paragraphs and a conclusion.',
+    topicPlaceholder: 'e.g., Some people think that universities should provide free education. To what extent do you agree or disagree?',
+    essayPlaceholder: 'Paste or type your IELTS Task 2 essay here. Aim for at least 250 words across an introduction, two body paragraphs and a conclusion.',
   },
   task1: {
     label: 'Task 1',
     minWords: 150,
     topicLabel: 'Chart / Diagram Description',
-    topicPlaceholder:
-      'e.g., The graph below shows the percentage of households in different income brackets in three countries between 2000 and 2020.',
-    essayPlaceholder:
-      'Paste or type your IELTS Task 1 report here. Aim for at least 150 words summarising the main features of the chart, graph, or diagram.',
+    topicPlaceholder: 'e.g., The graph below shows the percentage of households in different income brackets in three countries between 2000 and 2020.',
+    essayPlaceholder: 'Paste or type your IELTS Task 1 report here. Aim for at least 150 words summarising the main features of the chart, graph, or diagram.',
   },
 };
 
@@ -65,13 +61,10 @@ function CriterionCard({ crit, value }) {
           <span className="crit-short" style={{ background: color }}>{crit.short}</span>
           <span className="crit-label">{crit.label}</span>
         </div>
-        <div className="crit-value" style={{ color }}>{value != null ? value.toFixed(1) : '—'}</div>
+        <span className="crit-value" style={{ color }}>{value != null ? value.toFixed(1) : '\u2014'}</span>
       </div>
       <div className="crit-bar">
-        <div
-          className="crit-bar-fill"
-          style={{ width: `${pct}%`, background: color }}
-        />
+        <div className="crit-bar-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
   );
@@ -133,59 +126,35 @@ export default function App() {
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
 
   return (
-    <div className="bc-root">
+    <div className="bc-root" data-theme={theme}>
       <header className="bc-header">
         <div className="bc-header-inner">
           <div className="bc-brand">
-            <div className="bc-logo" aria-hidden>
-              <svg viewBox="0 0 32 32" width="28" height="28">
-                <rect x="2" y="14" width="4" height="14" rx="1.5" fill="currentColor" />
-                <rect x="9" y="8" width="4" height="20" rx="1.5" fill="currentColor" />
-                <rect x="16" y="2" width="4" height="26" rx="1.5" fill="currentColor" />
-                <rect x="23" y="10" width="4" height="18" rx="1.5" fill="currentColor" />
+            <div className="bc-logo">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
               </svg>
             </div>
-            <div className="bc-brand-text">
+            <div>
               <div className="bc-brand-title">BandCheck</div>
-              <div className="bc-brand-sub">IELTS Writing Evaluator</div>
+              <div className="bc-brand-sub">IELTS Writing Evaluator &middot; Powered by Google Gemini AI</div>
             </div>
           </div>
-          <button
-            className="bc-theme-toggle"
-            onClick={() => setTheme(t => (t === 'light' ? 'dark' : 'light'))}
-            aria-label="Toggle dark mode"
-          >
-            {theme === 'light' ? '🌙' : '☀️'}
+          <button className="bc-theme-toggle" onClick={() => setTheme(t => (t === 'light' ? 'dark' : 'light'))} aria-label="Toggle dark mode">
+            {theme === 'light' ? '\uD83C\uDF19' : '\u2600\uFE0F'}
           </button>
         </div>
       </header>
 
       <main className="bc-main">
-        <section className="bc-hero">
+        <div className="bc-hero">
           <h1>IELTS Writing Essay Checker</h1>
-          <p>
-            Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.
-            Powered by Hugging Face IELTS scoring models.
-          </p>
-        </section>
+          <p>Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2. Powered by Google Gemini AI.</p>
+        </div>
 
-        <div className="bc-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={task === 'task2'}
-            className={`bc-tab ${task === 'task2' ? 'active' : ''}`}
-            onClick={() => setTask('task2')}
-          >
-            Task 2 (Essay)
-          </button>
-          <button
-            role="tab"
-            aria-selected={task === 'task1'}
-            className={`bc-tab ${task === 'task1' ? 'active' : ''}`}
-            onClick={() => setTask('task1')}
-          >
-            Task 1 (Report)
-          </button>
+        <div className="bc-tabs">
+          <button className={`bc-tab${task === 'task2' ? ' active' : ''}`} onClick={() => setTask('task2')}>Task 2 (Essay)</button>
+          <button className={`bc-tab${task === 'task1' ? ' active' : ''}`} onClick={() => setTask('task1')}>Task 1 (Report)</button>
         </div>
 
         <form className="bc-form" onSubmit={handleEvaluate}>
@@ -200,10 +169,9 @@ export default function App() {
           />
 
           <div className="bc-essay-head">
-            <label className="bc-label" htmlFor="essay">Your Essay</label>
-            <span className={`bc-wordcount ${wordOk ? 'ok' : ''}`}>
-              {wordCount} words
-              <span className="bc-wordcount-hint"> / min {copy.minWords}</span>
+            <label className="bc-label" htmlFor="essay" style={{ margin: 0 }}>Your Essay</label>
+            <span className={`bc-wordcount${wordOk ? ' ok' : ''}`}>
+              {wordCount} words <span className="bc-wordcount-hint">/ min {copy.minWords}</span>
             </span>
           </div>
           <textarea
@@ -214,38 +182,31 @@ export default function App() {
             placeholder={copy.essayPlaceholder}
             rows={16}
           />
-
           <button type="submit" className="bc-submit" disabled={loading}>
             {loading ? (
-              <>
-                <span className="bc-spinner" /> Evaluating…
-              </>
+              <><span className="bc-spinner" /> Evaluating&hellip;</>
             ) : (
               'Evaluate Essay'
             )}
           </button>
-
           {error && <div className="bc-error">{error}</div>}
         </form>
 
         {results && (
           <section id="results" className="bc-results">
             <h2 className="bc-results-title">Your Band Score</h2>
-
             <div className="bc-overall">
               <div className="bc-overall-label">Overall Band Score</div>
               <div className="bc-overall-value">
-                {overall != null ? overall.toFixed(1) : '—'}
+                {overall != null ? overall.toFixed(1) : '\u2014'}
               </div>
               <div className="bc-overall-sub">out of 9.0</div>
             </div>
-
             <div className="bc-crit-grid">
               {criteria.map(c => (
                 <CriterionCard key={c.key} crit={c} value={results.bandScores?.[c.key]} />
               ))}
             </div>
-
             {Array.isArray(results.feedback) && results.feedback.length > 0 && (
               <div className="bc-feedback">
                 <h3>AI Feedback</h3>
@@ -254,7 +215,6 @@ export default function App() {
                 </ul>
               </div>
             )}
-
             <div className="bc-stats">
               <div className="bc-stat">
                 <div className="bc-stat-value">{results.counts?.words ?? wordCount}</div>
@@ -269,10 +229,9 @@ export default function App() {
                 <div className="bc-stat-label">Paragraphs</div>
               </div>
             </div>
-
             {results.warnings && (
               <div className="bc-warnings">
-                <strong>Note:</strong> Some AI services returned partial results.
+                <strong>Note:</strong> Some services returned partial results.
                 <ul>
                   {Object.entries(results.warnings).map(([k, v]) => <li key={k}>{k}: {v}</li>)}
                 </ul>
@@ -283,7 +242,10 @@ export default function App() {
       </main>
 
       <footer className="bc-footer">
-        <p>BandCheck · IELTS Writing Evaluator · Powered by Hugging Face</p>
+        <div className="bc-footer-brand">BandCheck &mdash; IELTS Writing Evaluator &mdash; Powered by Google Gemini AI</div>
+        <div className="bc-footer-author">
+          AUTHOR &mdash; <span className="bc-author-name">NAKIB MAHMUD TANIM</span>
+        </div>
       </footer>
     </div>
   );
