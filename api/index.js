@@ -392,6 +392,19 @@ const healthHandler = (_, res) =>
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
+// Diagnostic: one zero-shot call, surfaces the raw HF status/snippet.
+// Returns 200 with { ok:false, error } on failure so we can read it via curl.
+async function diagHandler(_req, res) {
+  try {
+    const out = await zeroShot('This is a short test essay about parks.', OVERALL_LABELS);
+    return res.json({ ok: true, model: MODEL, sample: out });
+  } catch (e) {
+    return res.json({ ok: false, model: MODEL, error: String(e.message || e) });
+  }
+}
+app.get('/diag', diagHandler);
+app.get('/api/diag', diagHandler);
+
 // ---------------- Server ----------------
 const PORT = process.env.PORT || 3001;
 if (require.main === module) {
