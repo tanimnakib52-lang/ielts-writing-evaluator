@@ -1,7 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const { Readable } = require('stream');
-const Tesseract = require('tesseract.js');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
@@ -10,34 +8,12 @@ const app = express();
 
 // ---------------- Config ----------------
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-
-// ---------------- Uploads (OCR) - multer v2 compatible ----------------
-const uploadsDir = path.join('/tmp', 'ielts-uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-// Multer v2 uses different import pattern - handle both v1 and v2
-let upload;
-try {
-  const multer = require('multer');
-  // Try multer v2 style (named export)
-  const storage = (multer.diskStorage || (multer.default && multer.default.diskStorage)
-    ? (multer.diskStorage || multer.default.diskStorage)({
-        destination: uploadsDir,
-        filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
-      })
-    : null);
-  const multerFn = typeof multer === 'function' ? multer : multer.default;
-  upload = storage ? multerFn({ storage }) : multerFn({ dest: uploadsDir });
-} catch (e) {
-  console.warn('multer load warning:', e.message);
-  upload = { single: () => (req, res, next) => next() };
-}
 
 // ---------------- Middleware ----------------
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // ---------------- Helpers ----------------
 function toHalfBand(score) {
@@ -68,8 +44,9 @@ async function callGemini(prompt) {
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 1024,
+        temperature: 0.3,
+        maxOutputTokens: 1500,
+        responseMimeType: 'application/json',
       },
     }),
   });
@@ -81,6 +58,7 @@ async function callGemini(prompt) {
 
   const data = await resp.json();
   const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  // Strip markdown fences if present
   return raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 }
 
@@ -88,30 +66,30 @@ async function callGemini(prompt) {
 function buildPrompt(task, topic, essay) {
   const taskLabel = task === 'task1' ? 'IELTS Academic Writing Task 1' : 'IELTS Academic Writing Task 2';
   const taskKey = task === 'task1' ? 'taskAchievement' : 'taskResponse';
-  return `You are an expert IELTS examiner. Evaluate the following ${taskLabel} essay and return ONLY valid JSON with no extra text or markdown fences.
+  return `You are an expert IELTS examiner. Evaluate the following ${taskLabel} response and return ONLY a valid JSON object with no extra text, no markdown, no code fences.
 
-JSON format:
+Return this exact JSON structure with numeric scores from 0 to 9 (half-band allowed, e.g. 6.5):
 {
   "bandScores": {
-    "${taskKey}": <number 0-9 rounded to nearest 0.5>,
-    "coherenceCohesion": <number 0-9 rounded to nearest 0.5>,
-    "lexicalResource": <number 0-9 rounded to nearest 0.5>,
-    "grammaticalRange": <number 0-9 rounded to nearest 0.5>,
-    "overall": <number 0-9 rounded to nearest 0.5>
+    "${taskKey}": 7,
+    "coherenceCohesion": 6.5,
+    "lexicalResource": 6,
+    "grammaticalRange": 7,
+    "overall": 6.5
   },
   "feedback": [
-    "<specific actionable feedback point 1>",
-    "<specific actionable feedback point 2>",
-    "<specific actionable feedback point 3>",
-    "<specific actionable feedback point 4>",
-    "<specific actionable feedback point 5>"
+    "Feedback point 1",
+    "Feedback point 2",
+    "Feedback point 3",
+    "Feedback point 4",
+    "Feedback point 5"
   ]
 }
 
 ${topic ? `Topic: ${topic}\n\n` : ''}Essay:\n${essay}`;
 }
 
-// ---------------- /evaluate (Gemini-powered) ----------------
+// ---------------- /evaluate ----------------
 async function evaluateHandler(req, res) {
   try {
     const body = req.body || {};
@@ -135,7 +113,14 @@ async function evaluateHandler(req, res) {
       parsed = JSON.parse(rawJson);
     } catch (e) {
       console.error('Failed to parse Gemini JSON:', rawJson);
-      return res.status(500).json({ error: 'Gemini returned invalid JSON', raw: rawJson });
+      // Try to extract JSON from response
+      const match = rawJson.match(/\{[\s\S]*\}/);
+      if (match) {
+        try { parsed = JSON.parse(match[0]); } catch (e2) {}
+      }
+      if (!parsed) {
+        return res.status(500).json({ error: 'Gemini returned invalid JSON', raw: rawJson });
+      }
     }
 
     const bandScores = {};
@@ -168,26 +153,10 @@ const healthHandler = (_, res) => res.json({ ok: true, gemini: !!GEMINI_API_KEY,
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
-// ---------------- OCR ----------------
-async function ocrHandler(req, res) {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
-    const imagePath = req.file.path;
-    const result = await Tesseract.recognize(imagePath, 'eng');
-    fs.unlink(imagePath, () => {});
-    return res.json({ success: true, text: result.data.text });
-  } catch (err) {
-    console.error('OCR error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to run OCR on image', message: err.message });
-  }
-}
-
-app.post('/ocr-evaluate', upload.single('essayImage'), ocrHandler);
-app.post('/api/ocr-evaluate', upload.single('essayImage'), ocrHandler);
-
 // ---------------- Server ----------------
 const PORT = process.env.PORT || 3001;
 if (require.main === module) {
   app.listen(PORT, () => console.log(`BandCheck API running at http://localhost:${PORT}`));
 }
+
 module.exports = app;
