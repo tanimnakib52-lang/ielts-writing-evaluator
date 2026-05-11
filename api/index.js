@@ -224,10 +224,16 @@ async function evaluateHandler(req, res) {
     ]);
 
     if (scoreRes.status !== 'fulfilled') {
-      console.error('Scoring failed:', scoreRes.reason?.message);
+      const msg = scoreRes.reason?.message || 'Unknown error from Hugging Face';
+      console.error('Scoring failed:', msg);
+      const looksLikePerms =
+        /sufficient permissions|Inference Providers|401|403/i.test(msg);
       return res.status(502).json({
         error: 'Scoring model failed',
-        message: scoreRes.reason?.message || 'Unknown error from Hugging Face',
+        message: looksLikePerms
+          ? 'The HF_TOKEN on the server is missing the "Make calls to Inference Providers" permission. Open https://huggingface.co/settings/tokens, edit the token, enable that permission (and "Read access to public repos"), save, then update HF_TOKEN in Vercel and redeploy.'
+          : msg,
+        detail: msg,
       });
     }
 
