@@ -8,7 +8,7 @@ const app = express();
 
 // ---------------- Config ----------------
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // ---------------- Middleware ----------------
@@ -46,7 +46,6 @@ async function callGemini(prompt) {
       generationConfig: {
         temperature: 0.3,
         maxOutputTokens: 1500,
-        responseMimeType: 'application/json',
       },
     }),
   });
@@ -66,27 +65,12 @@ async function callGemini(prompt) {
 function buildPrompt(task, topic, essay) {
   const taskLabel = task === 'task1' ? 'IELTS Academic Writing Task 1' : 'IELTS Academic Writing Task 2';
   const taskKey = task === 'task1' ? 'taskAchievement' : 'taskResponse';
-  return `You are an expert IELTS examiner. Evaluate the following ${taskLabel} response and return ONLY a valid JSON object with no extra text, no markdown, no code fences.
+  return `You are an expert IELTS examiner. Evaluate the essay below and respond with ONLY a JSON object. No text before or after. No markdown. No code fences. Just pure JSON.
 
-Return this exact JSON structure with numeric scores from 0 to 9 (half-band allowed, e.g. 6.5):
-{
-  "bandScores": {
-    "${taskKey}": 7,
-    "coherenceCohesion": 6.5,
-    "lexicalResource": 6,
-    "grammaticalRange": 7,
-    "overall": 6.5
-  },
-  "feedback": [
-    "Feedback point 1",
-    "Feedback point 2",
-    "Feedback point 3",
-    "Feedback point 4",
-    "Feedback point 5"
-  ]
-}
+JSON format (replace numbers with actual scores 0-9, half bands allowed):
+{"bandScores":{"${taskKey}":7,"coherenceCohesion":6.5,"lexicalResource":6,"grammaticalRange":7,"overall":6.5},"feedback":["point1","point2","point3","point4","point5"]}
 
-${topic ? `Topic: ${topic}\n\n` : ''}Essay:\n${essay}`;
+${topic ? `Topic: ${topic}\n\n` : ''}Essay: ${essay}`;
 }
 
 // ---------------- /evaluate ----------------
@@ -112,14 +96,16 @@ async function evaluateHandler(req, res) {
     try {
       parsed = JSON.parse(rawJson);
     } catch (e) {
-      console.error('Failed to parse Gemini JSON:', rawJson);
-      // Try to extract JSON from response
+      console.error('Failed to parse Gemini JSON:', rawJson.substring(0, 500));
+      // Try to extract JSON object from response
       const match = rawJson.match(/\{[\s\S]*\}/);
       if (match) {
-        try { parsed = JSON.parse(match[0]); } catch (e2) {}
+        try { parsed = JSON.parse(match[0]); } catch (e2) {
+          console.error('Regex extract also failed:', e2.message);
+        }
       }
       if (!parsed) {
-        return res.status(500).json({ error: 'Gemini returned invalid JSON', raw: rawJson });
+        return res.status(500).json({ error: 'Gemini returned invalid JSON', raw: rawJson.substring(0, 300) });
       }
     }
 
