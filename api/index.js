@@ -96,9 +96,17 @@ async function zeroShot(text, labels, { multi = false, timeoutMs = 35000 } = {})
           errors.push(`${resp.status} @ ${url.split('/').slice(-3).join('/')}: ${snippet}`);
           break;
         }
-        // Expected shape: { sequence, labels:[...], scores:[...] }
+        // Accept two shapes:
+        //   (a) classic: { sequence, labels:[...], scores:[...] }
+        //   (b) router pipeline: [{ label, score }, ...]
         if (data && Array.isArray(data.labels) && Array.isArray(data.scores)) {
           return { labels: data.labels, scores: data.scores };
+        }
+        if (Array.isArray(data) && data.length && data[0] && 'label' in data[0] && 'score' in data[0]) {
+          return {
+            labels: data.map((x) => String(x.label)),
+            scores: data.map((x) => Number(x.score)),
+          };
         }
         errors.push(`unexpected response shape: ${JSON.stringify(data).slice(0, 180)}`);
         break;
