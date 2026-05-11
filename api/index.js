@@ -22,18 +22,18 @@ Topic: ${topic || 'General'}
 Essay:
 ${essay}
 
-Return this exact JSON structure:
+Return this exact JSON structure (use these exact key names):
 {
   "overall": <number 0-9 in 0.5 steps>,
-  "task_achievement": <number 0-9 in 0.5 steps>,
-  "coherence_cohesion": <number 0-9 in 0.5 steps>,
-  "lexical_resource": <number 0-9 in 0.5 steps>,
-  "grammatical_range": <number 0-9 in 0.5 steps>,
+  "taskResponse": <number 0-9 in 0.5 steps>,
+  "coherenceCohesion": <number 0-9 in 0.5 steps>,
+  "lexicalResource": <number 0-9 in 0.5 steps>,
+  "grammaticalRange": <number 0-9 in 0.5 steps>,
   "feedback": {
-    "task_achievement": "<2-3 sentences feedback>",
-    "coherence_cohesion": "<2-3 sentences feedback>",
-    "lexical_resource": "<2-3 sentences feedback>",
-    "grammatical_range": "<2-3 sentences feedback>",
+    "taskResponse": "<2-3 sentences feedback>",
+    "coherenceCohesion": "<2-3 sentences feedback>",
+    "lexicalResource": "<2-3 sentences feedback>",
+    "grammaticalRange": "<2-3 sentences feedback>",
     "overall": "<3-4 sentences overall feedback with improvement tips>"
   }
 }`;
@@ -87,10 +87,10 @@ async function handleEvaluate(req, res) {
       success: true,
       scores: {
         overall: roundHalf(result.overall),
-        task_achievement: roundHalf(result.task_achievement),
-        coherence_cohesion: roundHalf(result.coherence_cohesion),
-        lexical_resource: roundHalf(result.lexical_resource),
-        grammatical_range: roundHalf(result.grammatical_range)
+        taskResponse: roundHalf(result.taskResponse),
+        coherenceCohesion: roundHalf(result.coherenceCohesion),
+        lexicalResource: roundHalf(result.lexicalResource),
+        grammaticalRange: roundHalf(result.grammaticalRange)
       },
       feedback: result.feedback
     });
