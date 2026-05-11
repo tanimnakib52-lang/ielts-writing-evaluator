@@ -73,7 +73,13 @@ function CriterionCard({ crit, value }) {
 export default function App() {
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'light';
-    return localStorage.getItem('bandcheck-theme') || 'light';
+    const saved = localStorage.getItem('bandcheck-theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    // Follow OS preference (auto light during the day, dark at night when the
+    // user's system theme schedule is enabled).
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
   });
   const [task, setTask] = useState('task2');
   const [topic, setTopic] = useState('');
@@ -82,10 +88,31 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Apply the theme to the DOM whenever it changes (but don't persist here —
+  // we only persist when the user explicitly toggles, so OS preference can
+  // keep driving the theme until the user overrides).
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('bandcheck-theme', theme);
   }, [theme]);
+
+  // Keep the theme in sync with the OS preference as long as the user hasn't
+  // manually picked one this session. This lets light show in daytime and dark
+  // at night when the OS toggles automatically.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e) => {
+      const saved = localStorage.getItem('bandcheck-theme');
+      if (saved === 'light' || saved === 'dark') return; // user override wins
+      setTheme(e.matches ? 'dark' : 'light');
+    };
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else if (mq.addListener) mq.addListener(handler);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler);
+      else if (mq.removeListener) mq.removeListener(handler);
+    };
+  }, []);
 
   const copy = TASK_COPY[task];
   const wordCount = useMemo(() => countWords(essay), [essay]);
@@ -137,10 +164,20 @@ export default function App() {
             </div>
             <div>
               <div className="bc-brand-title">BandCheck</div>
-              <div className="bc-brand-sub">IELTS Writing Evaluator &middot; Powered by Google Gemini AI</div>
+              <div className="bc-brand-sub">IELTS Writing Evaluator</div>
             </div>
           </div>
-          <button className="bc-theme-toggle" onClick={() => setTheme(t => (t === 'light' ? 'dark' : 'light'))} aria-label="Toggle dark mode">
+          <button
+            className="bc-theme-toggle"
+            onClick={() => {
+              setTheme(t => {
+                const next = t === 'light' ? 'dark' : 'light';
+                try { localStorage.setItem('bandcheck-theme', next); } catch (_) {}
+                return next;
+              });
+            }}
+            aria-label="Toggle dark mode"
+          >
             {theme === 'light' ? '\uD83C\uDF19' : '\u2600\uFE0F'}
           </button>
         </div>
@@ -149,7 +186,10 @@ export default function App() {
       <main className="bc-main">
         <div className="bc-hero">
           <h1>IELTS Writing Essay Checker</h1>
-          <p>Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2. Powered by Google Gemini AI.</p>
+          <div className="bc-author bc-author--hero">
+            AUTHOR &mdash; <span className="bc-author-name">NAKIB MAHMUD TANIM</span>
+          </div>
+          <p>Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.</p>
         </div>
 
         <div className="bc-tabs">
@@ -242,10 +282,7 @@ export default function App() {
       </main>
 
       <footer className="bc-footer">
-        <div className="bc-footer-brand">BandCheck &mdash; IELTS Writing Evaluator &mdash; Powered by Google Gemini AI</div>
-        <div className="bc-footer-author">
-          AUTHOR &mdash; <span className="bc-author-name">NAKIB MAHMUD TANIM</span>
-        </div>
+        <div className="bc-footer-brand">BandCheck &mdash; IELTS Writing Evaluator</div>
       </footer>
     </div>
   );
