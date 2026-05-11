@@ -1,6 +1,6 @@
 /**
  * BandCheck IELTS Writing Evaluator API
- * Scoring powered by Groq (llama3-70b-8192)
+ * Scoring powered by Groq (llama-3.3-70b-versatile)
  */
 
 const express = require('express');
@@ -12,6 +12,7 @@ app.use(express.json({ limit: '2mb' }));
 
 const GROQ_API_KEY = process.env.GROQ_API_KYE;
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const MODEL = 'llama-3.3-70b-versatile';
 
 async function evaluateWithGroq(task, topic, essay) {
   const prompt = `You are an expert IELTS examiner. Evaluate the following IELTS Writing ${task === 'task1' ? 'Task 1' : 'Task 2'} essay and return a JSON object only, no explanation outside JSON.
@@ -44,7 +45,7 @@ Return this exact JSON structure:
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'llama3-70b-8192',
+      model: MODEL,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
       max_tokens: 1024
@@ -59,13 +60,11 @@ Return this exact JSON structure:
   const data = await response.json();
   const content = data.choices[0].message.content.trim();
 
-  // Extract JSON from response
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON found in Groq response');
   return JSON.parse(jsonMatch[0]);
 }
 
-// Helper to round to nearest 0.5
 function roundHalf(num) {
   return Math.round(num * 2) / 2;
 }
@@ -108,7 +107,7 @@ app.get(['/health', '/api/health'], (req, res) => {
   res.json({
     ok: true,
     groq: !!GROQ_API_KEY,
-    model: 'llama3-70b-8192'
+    model: MODEL
   });
 });
 
