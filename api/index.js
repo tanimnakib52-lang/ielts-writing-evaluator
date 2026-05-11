@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const multer = require('multer');
+const { Readable } = require('stream');
 const Tesseract = require('tesseract.js');
 const path = require('path');
 const fs = require('fs');
@@ -10,13 +10,30 @@ const app = express();
 
 // ---------------- Config ----------------
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-1.5-flash-8b';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-// ---------------- Uploads (OCR) ----------------
+// ---------------- Uploads (OCR) - multer v2 compatible ----------------
 const uploadsDir = path.join('/tmp', 'ielts-uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-const upload = multer({ dest: uploadsDir });
+
+// Multer v2 uses different import pattern - handle both v1 and v2
+let upload;
+try {
+  const multer = require('multer');
+  // Try multer v2 style (named export)
+  const storage = (multer.diskStorage || (multer.default && multer.default.diskStorage)
+    ? (multer.diskStorage || multer.default.diskStorage)({
+        destination: uploadsDir,
+        filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+      })
+    : null);
+  const multerFn = typeof multer === 'function' ? multer : multer.default;
+  upload = storage ? multerFn({ storage }) : multerFn({ dest: uploadsDir });
+} catch (e) {
+  console.warn('multer load warning:', e.message);
+  upload = { single: () => (req, res, next) => next() };
+}
 
 // ---------------- Middleware ----------------
 app.use(cors());
@@ -64,7 +81,6 @@ async function callGemini(prompt) {
 
   const data = await resp.json();
   const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  // Strip markdown code fences if present
   return raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 }
 
@@ -72,7 +88,7 @@ async function callGemini(prompt) {
 function buildPrompt(task, topic, essay) {
   const taskLabel = task === 'task1' ? 'IELTS Academic Writing Task 1' : 'IELTS Academic Writing Task 2';
   const taskKey = task === 'task1' ? 'taskAchievement' : 'taskResponse';
-  return `You are an expert IELTS examiner. Evaluate the following ${taskLabel} essay and return ONLY valid JSON — no extra text, no markdown fences.
+  return `You are an expert IELTS examiner. Evaluate the following ${taskLabel} essay and return ONLY valid JSON with no extra text or markdown fences.
 
 JSON format:
 {
@@ -122,7 +138,6 @@ async function evaluateHandler(req, res) {
       return res.status(500).json({ error: 'Gemini returned invalid JSON', raw: rawJson });
     }
 
-    // Sanitise band scores to nearest 0.5
     const bandScores = {};
     for (const [k, v] of Object.entries(parsed.bandScores || {})) {
       bandScores[k] = toHalfBand(v);
@@ -149,11 +164,11 @@ app.post('/evaluate', evaluateHandler);
 app.post('/api/evaluate', evaluateHandler);
 
 // ---------------- Health ----------------
-const healthHandler = (_, res) => res.json({ ok: true, gemini: !!GEMINI_API_KEY });
+const healthHandler = (_, res) => res.json({ ok: true, gemini: !!GEMINI_API_KEY, model: GEMINI_MODEL });
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
-// ---------------- OCR (kept) ----------------
+// ---------------- OCR ----------------
 async function ocrHandler(req, res) {
   try {
     if (!req.file) return res.status(400).json({ error: 'No image file provided' });
