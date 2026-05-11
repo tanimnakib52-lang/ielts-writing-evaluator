@@ -85,7 +85,7 @@ async function handleEvaluate(req, res) {
 
     return res.json({
       success: true,
-      scores: {
+      bandScores: {
         overall: roundHalf(result.overall),
         taskResponse: roundHalf(result.taskResponse),
         coherenceCohesion: roundHalf(result.coherenceCohesion),
