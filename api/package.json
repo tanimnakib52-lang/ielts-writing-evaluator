@@ -1,20 +1,18 @@
 {
   "name": "ielts-writing-evaluator-api",
-  "version": "3.0.0",
-  "description": "BandCheck IELTS Writing Evaluation API powered by Google Gemini AI",
+  "version": "4.0.0",
+  "description": "BandCheck IELTS Writing Evaluation API powered by Hugging Face (KevSun/IELTS_essay_scoring)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"
   },
-  "keywords": ["ielts", "writing", "evaluation", "scoring", "essay", "gemini", "api"],
+  "keywords": ["ielts", "writing", "evaluation", "scoring", "essay", "huggingface", "api"],
   "author": "Nakib Mahmud Tanim",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "multer": "^2.0.0",
-    "tesseract.js": "^5.1.1",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
