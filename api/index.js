@@ -26,9 +26,12 @@ app.use(express.json({ limit: '2mb' }));
 const HF_TOKEN = process.env.HF_TOKEN;
 const MODEL = 'FacebookAI/roberta-large-mnli';
 
-// Try the new router URL first, then the legacy endpoint as a fallback.
+// roberta-large-mnli is served as a text-classification model by default.
+// To use it for zero-shot we must hit the dedicated pipeline endpoint.
 const HF_URLS = (model) => [
-  `https://router.huggingface.co/hf-inference/models/${model}`,
+  `https://router.huggingface.co/hf-inference/models/${model}/pipeline/zero-shot-classification`,
+  `https://router.huggingface.co/hf-inference/pipeline/zero-shot-classification/${model}`,
+  `https://api-inference.huggingface.co/pipeline/zero-shot-classification/${model}`,
   `https://api-inference.huggingface.co/models/${model}`,
 ];
 
