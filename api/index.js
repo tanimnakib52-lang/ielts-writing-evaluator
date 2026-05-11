@@ -34,6 +34,33 @@ function countParagraphs(text) {
   return text.split(/\n\s*\n/).filter(p => p.trim().length).length || (text.trim() ? 1 : 0);
 }
 
+// Sanitize raw JSON-like string by removing literal newlines and control chars
+function sanitizeJson(str) {
+  // Replace literal newlines/tabs within the string with spaces
+  // This handles Gemini inserting newlines inside JSON string values
+  let result = '';
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (escape) {
+      result += ch;
+      escape = false;
+    } else if (ch === '\\') {
+      result += ch;
+      escape = true;
+    } else if (ch === '"') {
+      result += ch;
+      inString = !inString;
+    } else if (inString && (ch === '\n' || ch === '\r' || ch === '\t')) {
+      result += ' ';
+    } else {
+      result += ch;
+    }
+  }
+  return result;
+}
+
 // ---------------- Gemini Call ----------------
 async function callGemini(prompt) {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not configured on server');
@@ -45,7 +72,7 @@ async function callGemini(prompt) {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 1500,
+        maxOutputTokens: 2048,
       },
     }),
   });
@@ -58,7 +85,8 @@ async function callGemini(prompt) {
   const data = await resp.json();
   const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   // Strip markdown fences if present
-  return raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  const stripped = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  return sanitizeJson(stripped);
 }
 
 // ---------------- Prompt Builder ----------------
@@ -100,7 +128,9 @@ async function evaluateHandler(req, res) {
       // Try to extract JSON object from response
       const match = rawJson.match(/\{[\s\S]*\}/);
       if (match) {
-        try { parsed = JSON.parse(match[0]); } catch (e2) {
+        try {
+          parsed = JSON.parse(sanitizeJson(match[0]));
+        } catch (e2) {
           console.error('Regex extract also failed:', e2.message);
         }
       }
