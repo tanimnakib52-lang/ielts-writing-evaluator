@@ -27,6 +27,7 @@ const FEEDBACK_MODEL = 'KevSun/IELTS_essay_comments';
 // Try the new router URL first, then the legacy endpoint
 const HF_URLS = (model) => [
   `https://router.huggingface.co/hf-inference/models/${model}`,
+  `https://router.huggingface.co/hf-inference/models/${model}/pipeline/text-classification`,
   `https://api-inference.huggingface.co/models/${model}`,
 ];
 
@@ -81,7 +82,7 @@ async function hfCall(model, inputs, { timeoutMs = 45000 } = {}) {
     'Content-Type': 'application/json',
   };
 
-  let lastErr;
+  const errors = [];
   for (const url of HF_URLS(model)) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const ctrl = new AbortController();
@@ -97,26 +98,22 @@ async function hfCall(model, inputs, { timeoutMs = 45000 } = {}) {
           data = text;
         }
         if (resp.status === 503 && attempt === 0) {
-          // Model still loading even with wait_for_model, retry once
           await new Promise((r) => setTimeout(r, 2500));
           continue;
         }
         if (!resp.ok) {
-          lastErr = new Error(
-            `HF ${resp.status} for ${model} @ ${url}: ${
-              typeof data === 'string' ? data.slice(0, 250) : JSON.stringify(data).slice(0, 250)
-            }`
-          );
+          const snippet = typeof data === 'string' ? data.slice(0, 200) : JSON.stringify(data).slice(0, 200);
+          errors.push(`${resp.status} @ ${url.split('/').slice(-3).join('/')}: ${snippet}`);
           break; // try next URL
         }
         return data;
       } catch (e) {
         clearTimeout(t);
-        lastErr = e;
+        errors.push(`EXC @ ${url.split('/').slice(-3).join('/')}: ${e.message}`);
       }
     }
   }
-  throw lastErr || new Error(`HF call failed for ${model}`);
+  throw new Error(`HF call failed for ${model}. Tried: ${errors.join(' | ')}`);
 }
 
 // ---------------- Parsing ----------------
