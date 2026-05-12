@@ -1,115 +1,80 @@
 # BandCheck — IELTS Writing Evaluator
 
-AI-powered IELTS Writing Task 1 & Task 2 band-score estimator with feedback.
+BandCheck is an AI-powered web application that evaluates IELTS Writing Task 1 and Task 2 responses and returns estimated band scores with structured feedback.
 
-- **Frontend**: React (CRA) — `client/`
-- **Backend**: Express on Vercel Serverless — `api/index.js`
-- **Scoring**: Groq — `llama-3.3-70b-versatile`
+## Overview
 
-## Features
+The application analyzes essays across the main IELTS writing criteria:
+- Task Response / Task Achievement
+- Coherence & Cohesion
+- Lexical Resource
+- Grammatical Range & Accuracy
 
-- IELTS Writing **Task 1** and **Task 2** evaluation
+It returns:
 - Criterion-wise band scores
 - Overall estimated band score
-- Actionable feedback, strengths, and improvements
-- Word, sentence, and paragraph counts
-- Clean responsive UI with dark/light theme
-
-## How scoring works
-
-Each essay is evaluated by **Groq `llama-3.3-70b-versatile`** using IELTS-style scoring logic based on the main writing criteria:
-
-1. **Task Response / Task Achievement** — how well the essay answers the prompt
-2. **Coherence & Cohesion** — organization, clarity, and logical progression
-3. **Lexical Resource** — vocabulary range and word choice
-4. **Grammatical Range & Accuracy** — grammar variety and correctness
-
-The API returns:
-- Criterion-wise scores
-- Overall band score
 - Feedback
 - Strengths
-- Improvements
-- Basic writing stats
+- Improvement suggestions
+- Basic writing statistics
 
-Scores are rounded to IELTS-style **0.5 bands**.
+## Tech Stack
 
-## Local development
+- **Frontend:** React
+- **Backend:** Express
+- **Deployment:** Vercel Serverless Functions
+- **AI Model:** Groq `llama-3.3-70b-versatile`
+
+## Project Structure
 
 ```bash
-# API
-cd api
-cp .env.example .env   # then add your GROQ_API_KEY
-npm install
-npm run dev            # http://localhost:3001
+client/   # React frontend
+api/      # Express serverless API
+```
 
-# Client (separate terminal)
+## Local Development
+
+### Backend
+```bash
+cd api
+cp .env.example .env
+# add GROQ_API_KEY
+npm install
+npm run dev
+```
+
+### Frontend
+```bash
 cd client
 npm install
-npm start              # http://localhost:3000
+npm start
 ```
 
-## Environment variables
+## Environment Variables
 
-| Name | Where | Required | Description |
-|------|-------|----------|-------------|
-| `GROQ_API_KEY` | Vercel / api `.env` | yes | Groq API key |
-| `REACT_APP_API_URL` | client | no | Defaults to `/api` in production |
+| Name | Required | Description |
+|------|----------|-------------|
+| `GROQ_API_KEY` | Yes | API key for Groq model access |
+| `REACT_APP_API_URL` | No | Custom API base URL for the frontend |
 
-## API
+## API Endpoint
 
-`POST /api/evaluate`
+**POST** `/api/evaluate`
+
+Example request:
 
 ```json
 {
   "task": "task2",
-  "topic": "optional question/topic",
-  "essay": "your essay text"
+  "topic": "Some IELTS topic",
+  "essay": "Your essay text here"
 }
 ```
 
-Response:
+## Deployment
 
-```json
-{
-  "task": "task2",
-  "bandScores": {
-    "taskResponse": 6.5,
-    "coherenceCohesion": 6.5,
-    "lexicalResource": 7.0,
-    "grammaticalRange": 6.0,
-    "overall": 6.5
-  },
-  "estimate": {
-    "overall_band": 6.5,
-    "task_response": 6.5,
-    "coherence_cohesion": 6.5,
-    "lexical_resource": 7.0,
-    "grammatical_range_accuracy": 6.0
-  },
-  "feedback": ["..."],
-  "strengths": ["..."],
-  "improvements": ["..."],
-  "counts": {
-    "words": 285,
-    "sentences": 16,
-    "paragraphs": 4
-  },
-  "model": "Groq llama3-70b"
-}
-```
-
-> For **Task 1**, `taskResponse` may be returned as `taskAchievement`.
-
-## Deploy
-
-Push to GitHub — Vercel auto-builds via `vercel.json`.
-
-Make sure `GROQ_API_KEY` is set in:
-
-**Project Settings → Environment Variables**
-
-Then redeploy.
+The project is configured for Vercel deployment through `vercel.json`.  
+After pushing to GitHub, set the required environment variables in Vercel and redeploy.
 
 ## Author
 
