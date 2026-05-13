@@ -8,19 +8,15 @@ const TASK_COPY = {
     label: 'Task 2',
     minWords: 250,
     topicLabel: 'Essay Question / Topic',
-    topicPlaceholder:
-      'e.g., Some people think that universities should provide free education. To what extent do you agree or disagree?',
-    essayPlaceholder:
-      'Paste or type your IELTS Task 2 essay here. Aim for at least 250 words across an introduction, two body paragraphs and a conclusion.',
+    topicPlaceholder: 'e.g., Some people think that universities should provide free education. To what extent do you agree or disagree?',
+    essayPlaceholder: 'Paste or type your IELTS Task 2 essay here. Aim for at least 250 words across an introduction, two body paragraphs and a conclusion.',
   },
   task1: {
     label: 'Task 1',
     minWords: 150,
     topicLabel: 'Chart / Diagram Description',
-    topicPlaceholder:
-      'e.g., The graph below shows the percentage of households in different income brackets in three countries between 2000 and 2020.',
-    essayPlaceholder:
-      'Paste or type your IELTS Task 1 report here. Aim for at least 150 words summarising the main features of the chart, graph, or diagram.',
+    topicPlaceholder: 'e.g., The graph below shows the percentage of households in different income brackets in three countries between 2000 and 2020.',
+    essayPlaceholder: 'Paste or type your IELTS Task 1 report here. Aim for at least 150 words summarising the main features of the chart, graph, or diagram.',
   },
 };
 
@@ -30,12 +26,22 @@ const CRITERIA_TASK2 = [
   { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
   { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
+
 const CRITERIA_TASK1 = [
   { key: 'taskResponse', short: 'TA', label: 'Task Achievement' },
   { key: 'coherenceCohesion', short: 'CC', label: 'Coherence & Cohesion' },
   { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
   { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
+
+const FEEDBACK_LABELS = {
+  taskResponse: 'Task Response / Achievement',
+  taskAchievement: 'Task Achievement',
+  coherenceCohesion: 'Coherence & Cohesion',
+  lexicalResource: 'Lexical Resource',
+  grammaticalRange: 'Grammatical Range & Accuracy',
+  overall: 'Overall Feedback',
+};
 
 function bandColor(v) {
   if (v == null) return 'var(--muted)';
@@ -45,15 +51,9 @@ function bandColor(v) {
   return '#16a34a';
 }
 
-function countWords(text) {
-  return (text.match(/\b[\w']+\b/g) || []).length;
-}
-function countSentences(text) {
-  return (text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g) || []).length || (text.trim() ? 1 : 0);
-}
-function countParagraphs(text) {
-  return text.split(/\n\s*\n/).filter(p => p.trim().length).length || (text.trim() ? 1 : 0);
-}
+function countWords(text) { return (text.match(/\b[\w']+\b/g) || []).length; }
+function countSentences(text) { return (text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g) || []).length || (text.trim() ? 1 : 0); }
+function countParagraphs(text) { return text.split(/\n\s*\n/).filter(p => p.trim().length).length || (text.trim() ? 1 : 0); }
 
 function CriterionCard({ crit, value }) {
   const pct = value == null ? 0 : Math.max(0, Math.min(100, (value / 9) * 100));
@@ -68,10 +68,7 @@ function CriterionCard({ crit, value }) {
         <div className="crit-value" style={{ color }}>{value != null ? value.toFixed(1) : '—'}</div>
       </div>
       <div className="crit-bar">
-        <div
-          className="crit-bar-fill"
-          style={{ width: `${pct}%`, background: color }}
-        />
+        <div className="crit-bar-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
   );
@@ -132,6 +129,11 @@ export default function App() {
   const overall = results?.bandScores?.overall;
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
 
+  // ✅ feedback object থেকে entries বের করো
+  const feedbackEntries = results?.feedback && typeof results.feedback === 'object' && !Array.isArray(results.feedback)
+    ? Object.entries(results.feedback)
+    : [];
+
   return (
     <div className="bc-root">
       <header className="bc-header">
@@ -150,11 +152,7 @@ export default function App() {
               <div className="bc-brand-sub">IELTS Writing Evaluator</div>
             </div>
           </div>
-          <button
-            className="bc-theme-toggle"
-            onClick={() => setTheme(t => (t === 'light' ? 'dark' : 'light'))}
-            aria-label="Toggle dark mode"
-          >
+          <button className="bc-theme-toggle" onClick={() => setTheme(t => (t === 'light' ? 'dark' : 'light'))} aria-label="Toggle dark mode">
             {theme === 'light' ? '🌙' : '☀️'}
           </button>
         </div>
@@ -163,68 +161,40 @@ export default function App() {
       <main className="bc-main">
         <section className="bc-hero">
           <h1>IELTS Writing Essay Checker</h1>
-          <p>
-            Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.
-            Powered by Hugging Face IELTS scoring models.
-          </p>
+          <p>Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.</p>
         </section>
 
         <div className="bc-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={task === 'task2'}
+          <button role="tab" aria-selected={task === 'task2'}
             className={`bc-tab ${task === 'task2' ? 'active' : ''}`}
-            onClick={() => setTask('task2')}
-          >
+            onClick={() => { setTask('task2'); setResults(null); setError(null); }}>
             Task 2 (Essay)
           </button>
-          <button
-            role="tab"
-            aria-selected={task === 'task1'}
+          <button role="tab" aria-selected={task === 'task1'}
             className={`bc-tab ${task === 'task1' ? 'active' : ''}`}
-            onClick={() => setTask('task1')}
-          >
+            onClick={() => { setTask('task1'); setResults(null); setError(null); }}>
             Task 1 (Report)
           </button>
         </div>
 
         <form className="bc-form" onSubmit={handleEvaluate}>
           <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
-          <input
-            id="topic"
-            className="bc-input"
-            type="text"
-            placeholder={copy.topicPlaceholder}
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-          />
+          <input id="topic" className="bc-input" type="text" placeholder={copy.topicPlaceholder}
+            value={topic} onChange={(e) => setTopic(e.target.value)} />
 
           <div className="bc-essay-head">
             <label className="bc-label" htmlFor="essay">Your Essay</label>
             <span className={`bc-wordcount ${wordOk ? 'ok' : ''}`}>
-              {wordCount} words
-              <span className="bc-wordcount-hint"> / min {copy.minWords}</span>
+              {wordCount} words<span className="bc-wordcount-hint"> / min {copy.minWords}</span>
             </span>
           </div>
-          <textarea
-            id="essay"
-            className="bc-textarea"
-            value={essay}
+          <textarea id="essay" className="bc-textarea" value={essay}
             onChange={(e) => setEssay(e.target.value)}
-            placeholder={copy.essayPlaceholder}
-            rows={16}
-          />
+            placeholder={copy.essayPlaceholder} rows={16} />
 
           <button type="submit" className="bc-submit" disabled={loading}>
-            {loading ? (
-              <>
-                <span className="bc-spinner" /> Evaluating…
-              </>
-            ) : (
-              'Evaluate Essay'
-            )}
+            {loading ? (<><span className="bc-spinner" /> Evaluating…</>) : ('Evaluate Essay')}
           </button>
-
           {error && <div className="bc-error">{error}</div>}
         </form>
 
@@ -234,9 +204,7 @@ export default function App() {
 
             <div className="bc-overall">
               <div className="bc-overall-label">Overall Band Score</div>
-              <div className="bc-overall-value">
-                {overall != null ? overall.toFixed(1) : '—'}
-              </div>
+              <div className="bc-overall-value">{overall != null ? overall.toFixed(1) : '—'}</div>
               <div className="bc-overall-sub">out of 9.0</div>
             </div>
 
@@ -246,12 +214,16 @@ export default function App() {
               ))}
             </div>
 
-            {Array.isArray(results.feedback) && results.feedback.length > 0 && (
+            {/* ✅ Feedback — object থেকে সঠিকভাবে দেখাবে */}
+            {feedbackEntries.length > 0 && (
               <div className="bc-feedback">
                 <h3>AI Feedback</h3>
-                <ul>
-                  {results.feedback.map((f, i) => <li key={i}>{f}</li>)}
-                </ul>
+                {feedbackEntries.map(([key, text]) => (
+                  <div className="bc-feedback-item" key={key}>
+                    <div className="bc-feedback-label">{FEEDBACK_LABELS[key] || key}</div>
+                    <p>{text}</p>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -283,7 +255,7 @@ export default function App() {
       </main>
 
       <footer className="bc-footer">
-        <p>BandCheck · IELTS Writing Evaluator · Powered by Hugging Face</p>
+        <p>BandCheck — IELTS Writing Evaluator</p>
       </footer>
     </div>
   );
