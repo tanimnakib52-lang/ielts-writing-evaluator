@@ -355,7 +355,11 @@ export default function App() {
                 <CriterionCard
                   key={c.key}
                   crit={c}
-                  value={results.bandScores?.[c.key]}
+                  value={
+                    results.bandScores?.[c.key] ??
+                    results.bandScores?.taskAchievement ??
+                    results.bandScores?.taskResponse
+                  }
                 />
               ))}
             </div>
