@@ -16,6 +16,7 @@ const MODEL = 'llama-3.3-70b-versatile';
 
 async function evaluateWithGroq(task, topic, essay) {
   const taskKey = task === 'task1' ? 'taskAchievement' : 'taskResponse';
+
   const prompt = `You are an expert IELTS examiner. Evaluate the following IELTS Writing ${task === 'task1' ? 'Task 1' : 'Task 2'} essay and return a JSON object only, no explanation outside JSON.
 
 Topic: ${topic || 'General'}
@@ -63,10 +64,12 @@ Return this exact JSON structure (use these exact key names):
 
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON found in Groq response');
+
   return JSON.parse(jsonMatch[0]);
 }
 
 function roundHalf(num) {
+  if (typeof num !== 'number' || Number.isNaN(num)) return null;
   return Math.round(num * 2) / 2;
 }
 
@@ -82,19 +85,30 @@ async function handleEvaluate(req, res) {
       return res.status(500).json({ error: 'GROQ_API_KEY not configured on server.' });
     }
 
-    const result = await evaluateWithGroq(task || 'task2', topic || '', essay);
-    const taskScore = result.taskResponse ?? result.taskAchievement;
+    const selectedTask = task || 'task2';
+    const result = await evaluateWithGroq(selectedTask, topic || '', essay);
+
+    const taskScore = result.taskAchievement ?? result.taskResponse;
+    const feedback = result.feedback || {};
 
     return res.json({
       success: true,
       bandScores: {
         overall: roundHalf(result.overall),
-        taskResponse: taskScore != null ? roundHalf(taskScore) : null,
+        taskResponse: roundHalf(taskScore),
+        taskAchievement: roundHalf(taskScore),
         coherenceCohesion: roundHalf(result.coherenceCohesion),
         lexicalResource: roundHalf(result.lexicalResource),
         grammaticalRange: roundHalf(result.grammaticalRange)
       },
-      feedback: result.feedback
+      feedback: {
+        taskResponse: feedback.taskResponse ?? feedback.taskAchievement ?? '',
+        taskAchievement: feedback.taskAchievement ?? feedback.taskResponse ?? '',
+        coherenceCohesion: feedback.coherenceCohesion ?? '',
+        lexicalResource: feedback.lexicalResource ?? '',
+        grammaticalRange: feedback.grammaticalRange ?? '',
+        overall: feedback.overall ?? ''
+      }
     });
   } catch (err) {
     console.error('Evaluate error:', err.message);
