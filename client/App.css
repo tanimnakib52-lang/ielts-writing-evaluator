@@ -459,3 +459,23 @@ body {
   .bc-tab { flex: 1; padding: 10px 12px; }
   .bc-textarea { min-height: 240px; }
 }
+.bc-feedback {
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.bc-feedback h3 {
+  margin-bottom: 16px;
+}
+
+.bc-feedback-item + .bc-feedback-item {
+  margin-top: 16px;
+}
+
+.bc-feedback-label {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
