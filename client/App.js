@@ -356,9 +356,9 @@ export default function App() {
                   key={c.key}
                   crit={c}
                   value={
-                    results.bandScores?.[c.key] ??
-                    results.bandScores?.taskAchievement ??
-                    results.bandScores?.taskResponse
+                    c.key === 'taskResponse'
+                      ? (results.bandScores?.taskResponse ?? results.bandScores?.taskAchievement)
+                      : results.bandScores?.[c.key]
                   }
                 />
               ))}
