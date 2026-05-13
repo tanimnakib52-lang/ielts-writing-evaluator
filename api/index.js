@@ -10,7 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
-const GROQ_API_KEY = process.env.GROQ_API_KYE;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.3-70b-versatile';
 
