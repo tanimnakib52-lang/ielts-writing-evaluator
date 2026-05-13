@@ -31,7 +31,7 @@ const CRITERIA_TASK2 = [
   { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
 const CRITERIA_TASK1 = [
-  { key: 'taskAchievement', short: 'TA', label: 'Task Achievement' },
+  { key: 'taskResponse', short: 'TA', label: 'Task Achievement' },
   { key: 'coherenceCohesion', short: 'CC', label: 'Coherence & Cohesion' },
   { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
   { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
