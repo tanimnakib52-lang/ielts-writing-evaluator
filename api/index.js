@@ -15,6 +15,7 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.3-70b-versatile';
 
 async function evaluateWithGroq(task, topic, essay) {
+  const taskKey = task === 'task1' ? 'taskAchievement' : 'taskResponse';
   const prompt = `You are an expert IELTS examiner. Evaluate the following IELTS Writing ${task === 'task1' ? 'Task 1' : 'Task 2'} essay and return a JSON object only, no explanation outside JSON.
 
 Topic: ${topic || 'General'}
@@ -25,12 +26,12 @@ ${essay}
 Return this exact JSON structure (use these exact key names):
 {
   "overall": <number 0-9 in 0.5 steps>,
-  "taskResponse": <number 0-9 in 0.5 steps>,
+  "${taskKey}": <number 0-9 in 0.5 steps>,
   "coherenceCohesion": <number 0-9 in 0.5 steps>,
   "lexicalResource": <number 0-9 in 0.5 steps>,
   "grammaticalRange": <number 0-9 in 0.5 steps>,
   "feedback": {
-    "taskResponse": "<2-3 sentences feedback>",
+    "${taskKey}": "<2-3 sentences feedback>",
     "coherenceCohesion": "<2-3 sentences feedback>",
     "lexicalResource": "<2-3 sentences feedback>",
     "grammaticalRange": "<2-3 sentences feedback>",
@@ -78,16 +79,17 @@ async function handleEvaluate(req, res) {
     }
 
     if (!GROQ_API_KEY) {
-      return res.status(500).json({ error: 'GROQ_API_KYE not configured on server.' });
+      return res.status(500).json({ error: 'GROQ_API_KEY not configured on server.' });
     }
 
     const result = await evaluateWithGroq(task || 'task2', topic || '', essay);
+    const taskScore = result.taskResponse ?? result.taskAchievement;
 
     return res.json({
       success: true,
       bandScores: {
         overall: roundHalf(result.overall),
-        taskResponse: roundHalf(result.taskResponse),
+        taskResponse: taskScore != null ? roundHalf(taskScore) : null,
         coherenceCohesion: roundHalf(result.coherenceCohesion),
         lexicalResource: roundHalf(result.lexicalResource),
         grammaticalRange: roundHalf(result.grammaticalRange)
