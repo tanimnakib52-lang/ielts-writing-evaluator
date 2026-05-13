@@ -162,8 +162,6 @@ export default function App() {
       }
 
       setResults(data);
-      console.log('DEBUG_FEEDBACK', data.feedback);
-      console.log('DEBUG_BANDS', data.bandScores);
 
       setTimeout(() => {
         const el = document.getElementById('results');
@@ -196,7 +194,7 @@ export default function App() {
     results?.feedback &&
     typeof results.feedback === 'object' &&
     !Array.isArray(results.feedback)
-      ? Object.entries(results.feedback)
+      ? Object.entries(results.feedback).filter(([, text]) => text && String(text).trim())
       : [];
 
   return (
@@ -326,20 +324,13 @@ export default function App() {
             </div>
 
             <div className="bc-crit-grid">
-              {criteria.map((c) => {
-                const safeValue =
-                  results?.bandScores?.[c.key] ??
-                  results?.bandScores?.taskAchievement ??
-                  results?.bandScores?.taskResponse;
-
-                return (
-                  <CriterionCard
-                    key={`${task}-${c.key}-${c.label}`}
-                    crit={c}
-                    value={safeValue}
-                  />
-                );
-              })}
+              {criteria.map((c) => (
+                <CriterionCard
+                  key={`${task}-${c.key}-${c.label}`}
+                  crit={c}
+                  value={results.bandScores?.[c.key]}
+                />
+              ))}
             </div>
 
             {feedbackEntries.length > 0 && (
