@@ -38,15 +38,6 @@ const CRITERIA_TASK1 = [
   { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
 
-const FEEDBACK_LABELS = {
-  taskResponse: 'Task Response',
-  taskAchievement: 'Task Achievement',
-  coherenceCohesion: 'Coherence & Cohesion',
-  lexicalResource: 'Lexical Resource',
-  grammaticalRange: 'Grammatical Range & Accuracy',
-  overall: 'Overall Feedback',
-};
-
 function bandColor(v) {
   if (v == null) return 'var(--muted)';
   if (v < 5) return '#e63946';
@@ -68,6 +59,16 @@ function countSentences(text) {
 
 function countParagraphs(text) {
   return text.split(/\n\s*\n/).filter((p) => p.trim().length).length || (text.trim() ? 1 : 0);
+}
+
+function getFeedbackLabel(key, task) {
+  if (key === 'taskResponse') return task === 'task1' ? 'Task Achievement' : 'Task Response';
+  if (key === 'taskAchievement') return 'Task Achievement';
+  if (key === 'coherenceCohesion') return 'Coherence & Cohesion';
+  if (key === 'lexicalResource') return 'Lexical Resource';
+  if (key === 'grammaticalRange') return 'Grammatical Range & Accuracy';
+  if (key === 'overall') return 'Overall Feedback';
+  return key;
 }
 
 function CriterionCard({ crit, value }) {
@@ -324,22 +325,30 @@ export default function App() {
             </div>
 
             <div className="bc-crit-grid">
-              {criteria.map((c) => (
-                <CriterionCard
-                  key={`${task}-${c.key}-${c.label}`}
-                  crit={c}
-                  value={results.bandScores?.[c.key]}
-                />
-              ))}
+              {criteria.map((c) => {
+                const safeValue =
+                  results?.bandScores?.[c.key] ??
+                  results?.bandScores?.taskAchievement ??
+                  results?.bandScores?.taskResponse;
+
+                return (
+                  <CriterionCard
+                    key={`${task}-${c.key}-${c.label}`}
+                    crit={c}
+                    value={safeValue}
+                  />
+                );
+              })}
             </div>
 
             {feedbackEntries.length > 0 && (
               <div className="bc-feedback">
                 <h3>AI Feedback</h3>
+
                 {feedbackEntries.map(([key, text]) => (
                   <div className="bc-feedback-item" key={key}>
                     <div className="bc-feedback-label">
-                      {FEEDBACK_LABELS[key] || key}
+                      {getFeedbackLabel(key, task)}
                     </div>
                     <p>{text}</p>
                   </div>
