@@ -88,18 +88,28 @@ async function handleEvaluate(req, res) {
     const selectedTask = task || 'task2';
     const result = await evaluateWithGroq(selectedTask, topic || '', essay);
 
-    const taskScore = result.taskAchievement ?? result.taskResponse;
+    const rawTaskScore = result.taskAchievement ?? result.taskResponse;
+    const ta = roundHalf(rawTaskScore);
+    const cc = roundHalf(result.coherenceCohesion);
+    const lr = roundHalf(result.lexicalResource);
+    const gra = roundHalf(result.grammaticalRange);
+
+    const computedOverall =
+      [ta, cc, lr, gra].every(v => typeof v === 'number')
+        ? roundHalf((ta + cc + lr + gra) / 4)
+        : roundHalf(result.overall);
+
     const feedback = result.feedback || {};
 
     return res.json({
       success: true,
       bandScores: {
-        overall: roundHalf(result.overall),
-        taskResponse: roundHalf(taskScore),
-        taskAchievement: roundHalf(taskScore),
-        coherenceCohesion: roundHalf(result.coherenceCohesion),
-        lexicalResource: roundHalf(result.lexicalResource),
-        grammaticalRange: roundHalf(result.grammaticalRange)
+        overall: computedOverall,
+        taskResponse: ta,
+        taskAchievement: ta,
+        coherenceCohesion: cc,
+        lexicalResource: lr,
+        grammaticalRange: gra
       },
       feedback: {
         taskResponse: feedback.taskResponse ?? feedback.taskAchievement ?? '',
