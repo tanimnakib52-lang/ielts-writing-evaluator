@@ -8,15 +8,19 @@ const TASK_COPY = {
     label: 'Task 2',
     minWords: 250,
     topicLabel: 'Essay Question / Topic',
-    topicPlaceholder: 'e.g., Some people think that universities should provide free education. To what extent do you agree or disagree?',
-    essayPlaceholder: 'Paste or type your IELTS Task 2 essay here. Aim for at least 250 words across an introduction, two body paragraphs and a conclusion.',
+    topicPlaceholder:
+      'e.g., Some people think that universities should provide free education. To what extent do you agree or disagree?',
+    essayPlaceholder:
+      'Paste or type your IELTS Task 2 essay here. Aim for at least 250 words across an introduction, two body paragraphs and a conclusion.',
   },
   task1: {
     label: 'Task 1',
     minWords: 150,
     topicLabel: 'Chart / Diagram Description',
-    topicPlaceholder: 'e.g., The graph below shows the percentage of households in different income brackets in three countries between 2000 and 2020.',
-    essayPlaceholder: 'Paste or type your IELTS Task 1 report here. Aim for at least 150 words summarising the main features of the chart, graph, or diagram.',
+    topicPlaceholder:
+      'e.g., The graph below shows the percentage of households in different income brackets in three countries between 2000 and 2020.',
+    essayPlaceholder:
+      'Paste or type your IELTS Task 1 report here. Aim for at least 150 words summarising the main features of the chart, graph, or diagram.',
   },
 };
 
@@ -26,6 +30,7 @@ const CRITERIA_TASK2 = [
   { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
   { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
+
 const CRITERIA_TASK1 = [
   { key: 'taskAchievement', short: 'TA', label: 'Task Achievement' },
   { key: 'coherenceCohesion', short: 'CC', label: 'Coherence & Cohesion' },
@@ -42,13 +47,18 @@ function bandColor(v) {
 }
 
 function countWords(text) {
-  return (text.match(/\b[\w']+\b/g) || []).length;
+  return (text.match(/[\p{L}\p{N}']+/gu) || []).length;
 }
+
 function countSentences(text) {
-  return (text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g) || []).length || (text.trim() ? 1 : 0);
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return 0;
+  const sentences = cleaned.match(/[^.!?]+[.!?]+(\s|$)/g);
+  return sentences ? sentences.length : 1;
 }
+
 function countParagraphs(text) {
-  return text.split(/\n\s*\n/).filter(p => p.trim().length).length || (text.trim() ? 1 : 0);
+  return text.split(/\n\s*\n/).filter((p) => p.trim().length).length || (text.trim() ? 1 : 0);
 }
 
 function getFeedbackLabel(key, task) {
@@ -64,17 +74,29 @@ function getFeedbackLabel(key, task) {
 function CriterionCard({ crit, value }) {
   const pct = value == null ? 0 : Math.max(0, Math.min(100, (value / 9) * 100));
   const color = bandColor(value);
+
   return (
     <div className="crit-card">
       <div className="crit-head">
         <div className="crit-name">
-          <span className="crit-short" style={{ background: color }}>{crit.short}</span>
+          <span className="crit-short" style={{ background: color }}>
+            {crit.short}
+          </span>
           <span className="crit-label">{crit.label}</span>
         </div>
-        <span className="crit-value" style={{ color }}>{value != null ? value.toFixed(1) : '—'}</span>
+        <div className="crit-value" style={{ color }}>
+          {value != null ? Number(value).toFixed(1) : '—'}
+        </div>
       </div>
+
       <div className="crit-bar">
-        <div className="crit-bar-fill" style={{ width: `${pct}%`, background: color }} />
+        <div
+          className="crit-bar-fill"
+          style={{
+            width: `${pct}%`,
+            background: color,
+          }}
+        />
       </div>
     </div>
   );
@@ -83,12 +105,9 @@ function CriterionCard({ crit, value }) {
 export default function App() {
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'light';
-    const saved = localStorage.getItem('bandcheck-theme');
-    if (saved === 'light' || saved === 'dark') return saved;
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
+    return localStorage.getItem('bandcheck-theme') || 'light';
   });
+
   const [task, setTask] = useState('task2');
   const [topic, setTopic] = useState('');
   const [essay, setEssay] = useState('');
@@ -98,23 +117,8 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('bandcheck-theme', theme);
   }, [theme]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = (e) => {
-      const saved = localStorage.getItem('bandcheck-theme');
-      if (saved === 'light' || saved === 'dark') return;
-      setTheme(e.matches ? 'dark' : 'light');
-    };
-    if (mq.addEventListener) mq.addEventListener('change', handler);
-    else if (mq.addListener) mq.addListener(handler);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener('change', handler);
-      else if (mq.removeListener) mq.removeListener(handler);
-    };
-  }, []);
 
   const copy = TASK_COPY[task];
   const wordCount = useMemo(() => countWords(essay), [essay]);
@@ -126,82 +130,97 @@ export default function App() {
     e.preventDefault();
     setError(null);
     setResults(null);
+
     if (essay.trim().length < 20) {
       setError('Please write at least a few sentences before evaluating.');
       return;
     }
+
     setLoading(true);
+
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+
       const res = await fetch(`${API}/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task, topic, essay }),
+        signal: controller.signal,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || 'Evaluation failed');
+
+      clearTimeout(timeout);
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Invalid server response');
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Evaluation failed');
+      }
+
       setResults(data);
+
       setTimeout(() => {
         const el = document.getElementById('results');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (el) {
+          el.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          });
+        }
       }, 100);
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      if (err.name === 'AbortError') {
+        setError('Request timed out. Please try again.');
+      } else {
+        setError(err.message || 'Something went wrong.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const overall = results?.bandScores?.overall;
+  const overall =
+    typeof results?.bandScores?.overall === 'number'
+      ? results.bandScores.overall
+      : null;
+
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
 
-  const feedbackEntries = useMemo(() => {
-    if (!results?.feedback) return [];
-
-    if (typeof results.feedback === 'string') {
-      return results.feedback.trim() ? [['overall', results.feedback.trim()]] : [];
-    }
-
-    if (typeof results.feedback === 'object' && !Array.isArray(results.feedback)) {
-      return Object.entries(results.feedback).filter(([, text]) => {
-        if (text == null) return false;
-        if (typeof text === 'string') return text.trim().length > 0;
-        return true;
-      });
-    }
-
-    if (Array.isArray(results.feedback)) {
-      return results.feedback
-        .map((item, i) => [String(i), item])
-        .filter(([, text]) => text != null);
-    }
-
-    return [];
-  }, [results]);
+  const feedbackEntries =
+    results?.feedback &&
+    typeof results.feedback === 'object' &&
+    !Array.isArray(results.feedback)
+      ? Object.entries(results.feedback).filter(([, text]) => text && String(text).trim())
+      : [];
 
   return (
-    <div className="bc-root" data-theme={theme}>
+    <div className="bc-root">
       <header className="bc-header">
         <div className="bc-header-inner">
           <div className="bc-brand">
-            <div className="bc-logo">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            <div className="bc-logo" aria-hidden>
+              <svg viewBox="0 0 32 32" width="28" height="28">
+                <rect x="2" y="14" width="4" height="14" rx="1.5" fill="currentColor" />
+                <rect x="9" y="8" width="4" height="20" rx="1.5" fill="currentColor" />
+                <rect x="16" y="2" width="4" height="26" rx="1.5" fill="currentColor" />
+                <rect x="23" y="10" width="4" height="18" rx="1.5" fill="currentColor" />
               </svg>
             </div>
-            <div>
+
+            <div className="bc-brand-text">
               <div className="bc-brand-title">BandCheck</div>
               <div className="bc-brand-sub">IELTS Writing Evaluator</div>
             </div>
           </div>
+
           <button
             className="bc-theme-toggle"
-            onClick={() => {
-              setTheme(t => {
-                const next = t === 'light' ? 'dark' : 'light';
-                try { localStorage.setItem('bandcheck-theme', next); } catch (_) {}
-                return next;
-              });
-            }}
+            onClick={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
             aria-label="Toggle dark mode"
           >
             {theme === 'light' ? '🌙' : '☀️'}
@@ -210,21 +229,47 @@ export default function App() {
       </header>
 
       <main className="bc-main">
-        <div className="bc-hero">
+        <section className="bc-hero">
           <h1>IELTS Writing Essay Checker</h1>
-          <div className="bc-author bc-author--hero">
-            AUTHOR &mdash; <span className="bc-author-name">NAKIB MAHMUD TANIM</span>
-          </div>
-          <p>Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.</p>
-        </div>
+          <p>
+            Get an instant band score and AI-powered feedback for IELTS Writing
+            Task 1 and Task 2.
+          </p>
+        </section>
 
-        <div className="bc-tabs">
-          <button className={`bc-tab${task === 'task2' ? ' active' : ''}`} onClick={() => { setTask('task2'); setResults(null); setError(null); }}>Task 2 (Essay)</button>
-          <button className={`bc-tab${task === 'task1' ? ' active' : ''}`} onClick={() => { setTask('task1'); setResults(null); setError(null); }}>Task 1 (Report)</button>
+        <div className="bc-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={task === 'task2'}
+            className={`bc-tab ${task === 'task2' ? 'active' : ''}`}
+            onClick={() => {
+              setTask('task2');
+              setResults(null);
+              setError(null);
+            }}
+          >
+            Task 2 (Essay)
+          </button>
+
+          <button
+            role="tab"
+            aria-selected={task === 'task1'}
+            className={`bc-tab ${task === 'task1' ? 'active' : ''}`}
+            onClick={() => {
+              setTask('task1');
+              setResults(null);
+              setError(null);
+            }}
+          >
+            Task 1 (Report)
+          </button>
         </div>
 
         <form className="bc-form" onSubmit={handleEvaluate}>
-          <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
+          <label className="bc-label" htmlFor="topic">
+            {copy.topicLabel}
+          </label>
+
           <input
             id="topic"
             className="bc-input"
@@ -235,11 +280,16 @@ export default function App() {
           />
 
           <div className="bc-essay-head">
-            <label className="bc-label" htmlFor="essay" style={{ margin: 0 }}>Your Essay</label>
-            <span className={`bc-wordcount${wordOk ? ' ok' : ''}`}>
-              {wordCount} words <span className="bc-wordcount-hint">/ min {copy.minWords}</span>
+            <label className="bc-label" htmlFor="essay">
+              Your Essay
+            </label>
+
+            <span className={`bc-wordcount ${wordOk ? 'ok' : ''}`}>
+              {wordCount} words
+              <span className="bc-wordcount-hint"> / min {copy.minWords}</span>
             </span>
           </div>
+
           <textarea
             id="essay"
             className="bc-textarea"
@@ -248,19 +298,24 @@ export default function App() {
             placeholder={copy.essayPlaceholder}
             rows={16}
           />
+
           <button type="submit" className="bc-submit" disabled={loading}>
             {loading ? (
-              <><span className="bc-spinner" /> Evaluating&hellip;</>
+              <>
+                <span className="bc-spinner" /> Evaluating…
+              </>
             ) : (
               'Evaluate Essay'
             )}
           </button>
+
           {error && <div className="bc-error">{error}</div>}
         </form>
 
         {results && (
           <section id="results" className="bc-results">
             <h2 className="bc-results-title">Your Band Score</h2>
+
             <div className="bc-overall">
               <div className="bc-overall-label">Overall Band Score</div>
               <div className="bc-overall-value">
@@ -270,24 +325,32 @@ export default function App() {
             </div>
 
             <div className="bc-crit-grid">
-              {criteria.map(c => (
-                <CriterionCard key={c.key} crit={c} value={results.bandScores?.[c.key]} />
-              ))}
+              {criteria.map((c) => {
+                const safeValue =
+                  results?.bandScores?.[c.key] ??
+                  results?.bandScores?.taskAchievement ??
+                  results?.bandScores?.taskResponse;
+
+                return (
+                  <CriterionCard
+                    key={`${task}-${c.key}-${c.label}`}
+                    crit={c}
+                    value={safeValue}
+                  />
+                );
+              })}
             </div>
 
             {feedbackEntries.length > 0 && (
               <div className="bc-feedback">
                 <h3>AI Feedback</h3>
+
                 {feedbackEntries.map(([key, text]) => (
                   <div className="bc-feedback-item" key={key}>
                     <div className="bc-feedback-label">
                       {getFeedbackLabel(key, task)}
                     </div>
-                    <p>
-                      {typeof text === 'string'
-                        ? text
-                        : JSON.stringify(text, null, 2)}
-                    </p>
+                    <p>{text}</p>
                   </div>
                 ))}
               </div>
@@ -295,24 +358,36 @@ export default function App() {
 
             <div className="bc-stats">
               <div className="bc-stat">
-                <div className="bc-stat-value">{results.counts?.words ?? wordCount}</div>
+                <div className="bc-stat-value">
+                  {results.counts?.words ?? wordCount}
+                </div>
                 <div className="bc-stat-label">Words</div>
               </div>
+
               <div className="bc-stat">
-                <div className="bc-stat-value">{results.counts?.sentences ?? sentenceCount}</div>
+                <div className="bc-stat-value">
+                  {results.counts?.sentences ?? sentenceCount}
+                </div>
                 <div className="bc-stat-label">Sentences</div>
               </div>
+
               <div className="bc-stat">
-                <div className="bc-stat-value">{results.counts?.paragraphs ?? paragraphCount}</div>
+                <div className="bc-stat-value">
+                  {results.counts?.paragraphs ?? paragraphCount}
+                </div>
                 <div className="bc-stat-label">Paragraphs</div>
               </div>
             </div>
 
-            {results.warnings && (
+            {Object.keys(results.warnings || {}).length > 0 && (
               <div className="bc-warnings">
-                <strong>Note:</strong> Some services returned partial results.
+                <strong>Note:</strong> Some AI services returned partial results.
                 <ul>
-                  {Object.entries(results.warnings).map(([k, v]) => <li key={k}>{k}: {v}</li>)}
+                  {Object.entries(results.warnings).map(([k, v]) => (
+                    <li key={k}>
+                      {k}: {v}
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
@@ -321,7 +396,7 @@ export default function App() {
       </main>
 
       <footer className="bc-footer">
-        <div className="bc-footer-brand">BandCheck &mdash; IELTS Writing Evaluator</div>
+        <p>BandCheck — IELTS Writing Evaluator</p>
       </footer>
     </div>
   );
