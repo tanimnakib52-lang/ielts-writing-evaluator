@@ -25,17 +25,17 @@ const TASK_COPY = {
 };
 
 const CRITERIA_TASK2 = [
-  { key: 'taskResponse', short: 'TR', label: 'Task Response' },
-  { key: 'coherenceCohesion', short: 'CC', label: 'Coherence & Cohesion' },
-  { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
-  { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
+  { key: 'taskResponse',      short: 'TR',  label: 'Task Response' },
+  { key: 'coherenceCohesion', short: 'CC',  label: 'Coherence & Cohesion' },
+  { key: 'lexicalResource',   short: 'LR',  label: 'Lexical Resource' },
+  { key: 'grammaticalRange',  short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
 
 const CRITERIA_TASK1 = [
-  { key: 'taskAchievement', short: 'TA', label: 'Task Achievement' },
-  { key: 'coherenceCohesion', short: 'CC', label: 'Coherence & Cohesion' },
-  { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
-  { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
+  { key: 'taskAchievement',   short: 'TA',  label: 'Task Achievement' },
+  { key: 'coherenceCohesion', short: 'CC',  label: 'Coherence & Cohesion' },
+  { key: 'lexicalResource',   short: 'LR',  label: 'Lexical Resource' },
+  { key: 'grammaticalRange',  short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
 
 function bandColor(v) {
@@ -62,13 +62,32 @@ function countParagraphs(text) {
 }
 
 function getFeedbackLabel(key, task) {
-  if (key === 'taskResponse') return task === 'task1' ? 'Task Achievement' : 'Task Response';
+  if (key === 'taskResponse')    return task === 'task1' ? 'Task Achievement' : 'Task Response';
   if (key === 'taskAchievement') return 'Task Achievement';
   if (key === 'coherenceCohesion') return 'Coherence & Cohesion';
-  if (key === 'lexicalResource') return 'Lexical Resource';
-  if (key === 'grammaticalRange') return 'Grammatical Range & Accuracy';
-  if (key === 'overall') return 'Overall Feedback';
+  if (key === 'lexicalResource')   return 'Lexical Resource';
+  if (key === 'grammaticalRange')  return 'Grammatical Range & Accuracy';
+  if (key === 'overall')           return 'Overall Feedback';
   return key;
+}
+
+// FIX: Safe text renderer — handles string, object, array gracefully
+function SafeText({ value }) {
+  if (value == null) return null;
+  if (typeof value === 'string') return <p>{value}</p>;
+  if (Array.isArray(value)) {
+    return (
+      <ul>
+        {value.map((item, i) => (
+          <li key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</li>
+        ))}
+      </ul>
+    );
+  }
+  if (typeof value === 'object') {
+    return <p style={{ fontFamily: 'monospace', fontSize: '13px', whiteSpace: 'pre-wrap' }}>{JSON.stringify(value, null, 2)}</p>;
+  }
+  return <p>{String(value)}</p>;
 }
 
 function CriterionCard({ crit, value }) {
@@ -88,14 +107,10 @@ function CriterionCard({ crit, value }) {
           {value != null ? Number(value).toFixed(1) : '—'}
         </div>
       </div>
-
       <div className="crit-bar">
         <div
           className="crit-bar-fill"
-          style={{
-            width: `${pct}%`,
-            background: color,
-          }}
+          style={{ width: `${pct}%`, background: color }}
         />
       </div>
     </div>
@@ -105,26 +120,27 @@ function CriterionCard({ crit, value }) {
 export default function App() {
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'light';
-    return localStorage.getItem('bandcheck-theme') || 'light';
+    try { return localStorage.getItem('bandcheck-theme') || 'light'; }
+    catch { return 'light'; }
   });
 
-  const [task, setTask] = useState('task2');
-  const [topic, setTopic] = useState('');
-  const [essay, setEssay] = useState('');
+  const [task,    setTask]    = useState('task2');
+  const [topic,   setTopic]   = useState('');
+  const [essay,   setEssay]   = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('bandcheck-theme', theme);
+    try { localStorage.setItem('bandcheck-theme', theme); } catch (_) {}
   }, [theme]);
 
-  const copy = TASK_COPY[task];
-  const wordCount = useMemo(() => countWords(essay), [essay]);
-  const sentenceCount = useMemo(() => countSentences(essay), [essay]);
-  const paragraphCount = useMemo(() => countParagraphs(essay), [essay]);
-  const wordOk = wordCount >= copy.minWords;
+  const copy         = TASK_COPY[task];
+  const wordCount    = useMemo(() => countWords(essay),      [essay]);
+  const sentenceCount= useMemo(() => countSentences(essay),  [essay]);
+  const paragraphCount=useMemo(() => countParagraphs(essay), [essay]);
+  const wordOk       = wordCount >= copy.minWords;
 
   const handleEvaluate = async (e) => {
     e.preventDefault();
@@ -137,10 +153,9 @@ export default function App() {
     }
 
     setLoading(true);
-
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
+      const timeout = setTimeout(() => controller.abort(), 25000);
 
       const res = await fetch(`${API}/evaluate`, {
         method: 'POST',
@@ -152,11 +167,8 @@ export default function App() {
       clearTimeout(timeout);
 
       let data = {};
-      try {
-        data = await res.json();
-      } catch {
-        throw new Error('Invalid server response');
-      }
+      try { data = await res.json(); }
+      catch { throw new Error('Invalid server response — could not parse JSON'); }
 
       if (!res.ok) {
         throw new Error(data.error || data.message || 'Evaluation failed');
@@ -166,12 +178,7 @@ export default function App() {
 
       setTimeout(() => {
         const el = document.getElementById('results');
-        if (el) {
-          el.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start',
-          });
-        }
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -184,19 +191,40 @@ export default function App() {
     }
   };
 
-  const overall =
-    typeof results?.bandScores?.overall === 'number'
-      ? results.bandScores.overall
-      : null;
+  const overall = typeof results?.bandScores?.overall === 'number'
+    ? results.bandScores.overall
+    : null;
 
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
 
-  const feedbackEntries =
-    results?.feedback &&
-    typeof results.feedback === 'object' &&
-    !Array.isArray(results.feedback)
-      ? Object.entries(results.feedback).filter(([, text]) => text && String(text).trim())
-      : [];
+  // FIX: Defensive feedbackEntries — handles null, string, malformed object
+  const feedbackEntries = useMemo(() => {
+    if (!results?.feedback) return [];
+
+    // Case 1: feedback is a plain string
+    if (typeof results.feedback === 'string') {
+      const trimmed = results.feedback.trim();
+      return trimmed ? [['overall', trimmed]] : [];
+    }
+
+    // Case 2: feedback is a proper object (expected case)
+    if (typeof results.feedback === 'object' && !Array.isArray(results.feedback)) {
+      return Object.entries(results.feedback).filter(([, text]) => {
+        if (text == null) return false;
+        if (typeof text === 'string') return text.trim().length > 0;
+        return true; // keep objects/arrays — SafeText will render them
+      });
+    }
+
+    // Case 3: feedback is an array (unexpected but handle gracefully)
+    if (Array.isArray(results.feedback)) {
+      return results.feedback
+        .map((item, i) => [String(i), item])
+        .filter(([, text]) => text != null);
+    }
+
+    return [];
+  }, [results]);
 
   return (
     <div className="bc-root">
@@ -205,13 +233,12 @@ export default function App() {
           <div className="bc-brand">
             <div className="bc-logo" aria-hidden>
               <svg viewBox="0 0 32 32" width="28" height="28">
-                <rect x="2" y="14" width="4" height="14" rx="1.5" fill="currentColor" />
-                <rect x="9" y="8" width="4" height="20" rx="1.5" fill="currentColor" />
-                <rect x="16" y="2" width="4" height="26" rx="1.5" fill="currentColor" />
+                <rect x="2"  y="14" width="4" height="14" rx="1.5" fill="currentColor" />
+                <rect x="9"  y="8"  width="4" height="20" rx="1.5" fill="currentColor" />
+                <rect x="16" y="2"  width="4" height="26" rx="1.5" fill="currentColor" />
                 <rect x="23" y="10" width="4" height="18" rx="1.5" fill="currentColor" />
               </svg>
             </div>
-
             <div className="bc-brand-text">
               <div className="bc-brand-title">BandCheck</div>
               <div className="bc-brand-sub">IELTS Writing Evaluator</div>
@@ -242,34 +269,22 @@ export default function App() {
             role="tab"
             aria-selected={task === 'task2'}
             className={`bc-tab ${task === 'task2' ? 'active' : ''}`}
-            onClick={() => {
-              setTask('task2');
-              setResults(null);
-              setError(null);
-            }}
+            onClick={() => { setTask('task2'); setResults(null); setError(null); }}
           >
             Task 2 (Essay)
           </button>
-
           <button
             role="tab"
             aria-selected={task === 'task1'}
             className={`bc-tab ${task === 'task1' ? 'active' : ''}`}
-            onClick={() => {
-              setTask('task1');
-              setResults(null);
-              setError(null);
-            }}
+            onClick={() => { setTask('task1'); setResults(null); setError(null); }}
           >
             Task 1 (Report)
           </button>
         </div>
 
         <form className="bc-form" onSubmit={handleEvaluate}>
-          <label className="bc-label" htmlFor="topic">
-            {copy.topicLabel}
-          </label>
-
+          <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
           <input
             id="topic"
             className="bc-input"
@@ -280,10 +295,7 @@ export default function App() {
           />
 
           <div className="bc-essay-head">
-            <label className="bc-label" htmlFor="essay">
-              Your Essay
-            </label>
-
+            <label className="bc-label" htmlFor="essay">Your Essay</label>
             <span className={`bc-wordcount ${wordOk ? 'ok' : ''}`}>
               {wordCount} words
               <span className="bc-wordcount-hint"> / min {copy.minWords}</span>
@@ -301,9 +313,7 @@ export default function App() {
 
           <button type="submit" className="bc-submit" disabled={loading}>
             {loading ? (
-              <>
-                <span className="bc-spinner" /> Evaluating…
-              </>
+              <><span className="bc-spinner" /> Evaluating…</>
             ) : (
               'Evaluate Essay'
             )}
@@ -325,68 +335,57 @@ export default function App() {
             </div>
 
             <div className="bc-crit-grid">
-              {criteria.map((c) => {
-                const safeValue =
-                  results?.bandScores?.[c.key] ??
-                  results?.bandScores?.taskAchievement ??
-                  results?.bandScores?.taskResponse;
-
-                return (
-                  <CriterionCard
-                    key={`${task}-${c.key}-${c.label}`}
-                    crit={c}
-                    value={safeValue}
-                  />
-                );
-              })}
+              {criteria.map((c) => (
+                <CriterionCard
+                  key={`${task}-${c.key}`}
+                  crit={c}
+                  value={results?.bandScores?.[c.key] ?? null}
+                />
+              ))}
             </div>
 
-            {feedbackEntries.length > 0 && (
+            {feedbackEntries.length > 0 ? (
               <div className="bc-feedback">
                 <h3>AI Feedback</h3>
-
                 {feedbackEntries.map(([key, text]) => (
                   <div className="bc-feedback-item" key={key}>
                     <div className="bc-feedback-label">
                       {getFeedbackLabel(key, task)}
                     </div>
-                    <p>{text}</p>
+                    <SafeText value={text} />
                   </div>
                 ))}
+              </div>
+            ) : (
+              <div className="bc-feedback">
+                <h3>AI Feedback</h3>
+                <p style={{ color: 'var(--text-muted)' }}>
+                  No detailed feedback was returned. Try submitting a longer essay.
+                </p>
               </div>
             )}
 
             <div className="bc-stats">
               <div className="bc-stat">
-                <div className="bc-stat-value">
-                  {results.counts?.words ?? wordCount}
-                </div>
+                <div className="bc-stat-value">{wordCount}</div>
                 <div className="bc-stat-label">Words</div>
               </div>
-
               <div className="bc-stat">
-                <div className="bc-stat-value">
-                  {results.counts?.sentences ?? sentenceCount}
-                </div>
+                <div className="bc-stat-value">{sentenceCount}</div>
                 <div className="bc-stat-label">Sentences</div>
               </div>
-
               <div className="bc-stat">
-                <div className="bc-stat-value">
-                  {results.counts?.paragraphs ?? paragraphCount}
-                </div>
+                <div className="bc-stat-value">{paragraphCount}</div>
                 <div className="bc-stat-label">Paragraphs</div>
               </div>
             </div>
 
-            {Object.keys(results.warnings || {}).length > 0 && (
+            {results.warnings && Object.keys(results.warnings).length > 0 && (
               <div className="bc-warnings">
                 <strong>Note:</strong> Some AI services returned partial results.
                 <ul>
                   {Object.entries(results.warnings).map(([k, v]) => (
-                    <li key={k}>
-                      {k}: {v}
-                    </li>
+                    <li key={k}>{k}: {v}</li>
                   ))}
                 </ul>
               </div>
