@@ -58,10 +58,12 @@ function CriterionCard({ crit, value }) {
     <div className="crit-card">
       <div className="crit-head">
         <div className="crit-name">
-          <span className="crit-short" style={{ background: color }}>{crit.short}</span>
-          <span className="crit-label">{crit.label}</span>
+          <span className="crit-short">{crit.short}</span>
+          {crit.label}
         </div>
-        <span className="crit-value" style={{ color }}>{value != null ? value.toFixed(1) : '\u2014'}</span>
+        <div className="crit-score" style={{ color }}>
+          {value != null ? value.toFixed(1) : '\u2014'}
+        </div>
       </div>
       <div className="crit-bar">
         <div className="crit-bar-fill" style={{ width: `${pct}%`, background: color }} />
@@ -70,16 +72,21 @@ function CriterionCard({ crit, value }) {
   );
 }
 
+const FEEDBACK_LABELS = {
+  taskResponse: 'Task Response',
+  taskAchievement: 'Task Achievement',
+  coherenceCohesion: 'Coherence & Cohesion',
+  lexicalResource: 'Lexical Resource',
+  grammaticalRange: 'Grammatical Range & Accuracy',
+  overall: 'Overall Feedback',
+};
+
 export default function App() {
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'light';
     const saved = localStorage.getItem('bandcheck-theme');
     if (saved === 'light' || saved === 'dark') return saved;
-    // Follow OS preference (auto light during the day, dark at night when the
-    // user's system theme schedule is enabled).
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
   const [task, setTask] = useState('task2');
   const [topic, setTopic] = useState('');
@@ -88,22 +95,16 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Apply the theme to the DOM whenever it changes (but don't persist here —
-  // we only persist when the user explicitly toggles, so OS preference can
-  // keep driving the theme until the user overrides).
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // Keep the theme in sync with the OS preference as long as the user hasn't
-  // manually picked one this session. This lets light show in daytime and dark
-  // at night when the OS toggles automatically.
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = (e) => {
       const saved = localStorage.getItem('bandcheck-theme');
-      if (saved === 'light' || saved === 'dark') return; // user override wins
+      if (saved === 'light' || saved === 'dark') return;
       setTheme(e.matches ? 'dark' : 'light');
     };
     if (mq.addEventListener) mq.addEventListener('change', handler);
@@ -118,7 +119,6 @@ export default function App() {
   const wordCount = useMemo(() => countWords(essay), [essay]);
   const sentenceCount = useMemo(() => countSentences(essay), [essay]);
   const paragraphCount = useMemo(() => countParagraphs(essay), [essay]);
-  const wordOk = wordCount >= copy.minWords;
 
   const handleEvaluate = async (e) => {
     e.preventDefault();
@@ -152,82 +152,80 @@ export default function App() {
   const overall = results?.bandScores?.overall;
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
 
+  // FIX: feedback is an object, not an array
+  const feedbackEntries = useMemo(() => {
+    if (!results?.feedback) return [];
+    if (typeof results.feedback === 'string') {
+      return [['overall', results.feedback]];
+    }
+    if (typeof results.feedback === 'object' && !Array.isArray(results.feedback)) {
+      return Object.entries(results.feedback).filter(([_, text]) => text && String(text).trim().length > 0);
+    }
+    if (Array.isArray(results.feedback)) {
+      return results.feedback.map((f, i) => [String(i), String(f)]);
+    }
+    return [];
+  }, [results]);
+
   return (
-    <div className="bc-root" data-theme={theme}>
+    <div className="bc-app">
       <header className="bc-header">
-        <div className="bc-header-inner">
-          <div className="bc-brand">
-            <div className="bc-logo">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-            </div>
-            <div>
-              <div className="bc-brand-title">BandCheck</div>
-              <div className="bc-brand-sub">IELTS Writing Evaluator</div>
-            </div>
+        <div className="bc-logo">
+          <span className="bc-logo-icon">&#10003;</span>
+          <div>
+            <div className="bc-logo-name">BandCheck</div>
+            <div className="bc-logo-sub">IELTS Writing Evaluator</div>
           </div>
-          <button
-            className="bc-theme-toggle"
-            onClick={() => {
-              setTheme(t => {
-                const next = t === 'light' ? 'dark' : 'light';
-                try { localStorage.setItem('bandcheck-theme', next); } catch (_) {}
-                return next;
-              });
-            }}
-            aria-label="Toggle dark mode"
-          >
-            {theme === 'light' ? '\uD83C\uDF19' : '\u2600\uFE0F'}
-          </button>
         </div>
+        <button
+          className="bc-theme-toggle"
+          onClick={() => {
+            setTheme(t => {
+              const next = t === 'light' ? 'dark' : 'light';
+              try { localStorage.setItem('bandcheck-theme', next); } catch (_) {}
+              return next;
+            });
+          }}
+          aria-label="Toggle dark mode"
+        >
+          {theme === 'light' ? '\uD83C\uDF19' : '\u2600\uFE0F'}
+        </button>
       </header>
 
       <main className="bc-main">
         <div className="bc-hero">
-          <h1>IELTS Writing Essay Checker</h1>
-          <div className="bc-author bc-author--hero">
-            AUTHOR &mdash; <span className="bc-author-name">NAKIB MAHMUD TANIM</span>
-          </div>
-          <p>Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.</p>
-        </div>
-
-        <div className="bc-tabs">
-          <button className={`bc-tab${task === 'task2' ? ' active' : ''}`} onClick={() => setTask('task2')}>Task 2 (Essay)</button>
-          <button className={`bc-tab${task === 'task1' ? ' active' : ''}`} onClick={() => setTask('task1')}>Task 1 (Report)</button>
+          <h1 className="bc-hero-title">IELTS Writing Essay Checker</h1>
+          <p className="bc-hero-author">AUTHOR &mdash; <strong>NAKIB MAHMUD TANIM</strong></p>
+          <p className="bc-hero-sub">Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.</p>
         </div>
 
         <form className="bc-form" onSubmit={handleEvaluate}>
-          <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
-          <input
-            id="topic"
-            className="bc-input"
-            type="text"
-            placeholder={copy.topicPlaceholder}
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-          />
-
-          <div className="bc-essay-head">
-            <label className="bc-label" htmlFor="essay" style={{ margin: 0 }}>Your Essay</label>
-            <span className={`bc-wordcount${wordOk ? ' ok' : ''}`}>
-              {wordCount} words <span className="bc-wordcount-hint">/ min {copy.minWords}</span>
-            </span>
+          <div className="bc-task-tabs">
+            <button type="button" className={`bc-task-tab${task === 'task2' ? ' active' : ''}`} onClick={() => setTask('task2')}>Task 2 (Essay)</button>
+            <button type="button" className={`bc-task-tab${task === 'task1' ? ' active' : ''}`} onClick={() => setTask('task1')}>Task 1 (Report)</button>
           </div>
-          <textarea
-            id="essay"
-            className="bc-textarea"
-            value={essay}
-            onChange={(e) => setEssay(e.target.value)}
-            placeholder={copy.essayPlaceholder}
-            rows={16}
-          />
+
+          <div className="bc-field">
+            <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
+            <input id="topic" className="bc-input" type="text" placeholder={copy.topicPlaceholder} value={topic} onChange={(e) => setTopic(e.target.value)} />
+          </div>
+
+          <div className="bc-field">
+            <label className="bc-label" htmlFor="essay">
+              Your Essay &nbsp;<span className="bc-wc">{wordCount} words</span>&nbsp;/ min {copy.minWords}
+            </label>
+            <textarea
+              id="essay"
+              className="bc-textarea"
+              value={essay}
+              onChange={(e) => setEssay(e.target.value)}
+              placeholder={copy.essayPlaceholder}
+              rows={16}
+            />
+          </div>
+
           <button type="submit" className="bc-submit" disabled={loading}>
-            {loading ? (
-              <><span className="bc-spinner" /> Evaluating&hellip;</>
-            ) : (
-              'Evaluate Essay'
-            )}
+            {loading ? (<><span className="bc-spinner" /> Evaluating&hellip;</>) : ('Evaluate Essay')}
           </button>
           {error && <div className="bc-error">{error}</div>}
         </form>
@@ -242,19 +240,27 @@ export default function App() {
               </div>
               <div className="bc-overall-sub">out of 9.0</div>
             </div>
+
             <div className="bc-crit-grid">
               {criteria.map(c => (
-                <CriterionCard key={c.key} crit={c} value={results.bandScores?.[c.key]} />
+                <CriterionCard key={c.key} crit={c} value={results.bandScores?.[c.key] ?? null} />
               ))}
             </div>
-            {Array.isArray(results.feedback) && results.feedback.length > 0 && (
+
+            {feedbackEntries.length > 0 && (
               <div className="bc-feedback">
                 <h3>AI Feedback</h3>
                 <ul>
-                  {results.feedback.map((f, i) => <li key={i}>{f}</li>)}
+                  {feedbackEntries.map(([key, text]) => (
+                    <li key={key}>
+                      <strong>{FEEDBACK_LABELS[key] || key}:</strong>{' '}
+                      {typeof text === 'string' ? text : JSON.stringify(text)}
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
+
             <div className="bc-stats">
               <div className="bc-stat">
                 <div className="bc-stat-value">{results.counts?.words ?? wordCount}</div>
@@ -269,6 +275,7 @@ export default function App() {
                 <div className="bc-stat-label">Paragraphs</div>
               </div>
             </div>
+
             {results.warnings && (
               <div className="bc-warnings">
                 <strong>Note:</strong> Some services returned partial results.
