@@ -40,10 +40,19 @@ const CRITERIA_TASK1 = [
 
 function bandColor(v) {
   if (v == null) return 'var(--muted)';
-  if (v < 5) return '#e63946';
+  if (v < 5) return '#ef4444';
   if (v < 6) return '#f59e0b';
-  if (v < 7) return '#d4a017';
-  return '#16a34a';
+  if (v < 7) return '#eab308';
+  return '#10b981';
+}
+
+function bandLabel(v) {
+  if (v == null) return '—';
+  if (v < 5) return 'Needs Work';
+  if (v < 6) return 'Modest';
+  if (v < 7) return 'Competent';
+  if (v < 8) return 'Good';
+  return 'Excellent';
 }
 
 function countWords(text) {
@@ -71,7 +80,6 @@ function getFeedbackLabel(key, task) {
   return key;
 }
 
-// FIX: Safe text renderer — handles string, object, array gracefully
 function SafeText({ value }) {
   if (value == null) return null;
   if (typeof value === 'string') return <p>{value}</p>;
@@ -85,7 +93,11 @@ function SafeText({ value }) {
     );
   }
   if (typeof value === 'object') {
-    return <p style={{ fontFamily: 'monospace', fontSize: '13px', whiteSpace: 'pre-wrap' }}>{JSON.stringify(value, null, 2)}</p>;
+    return (
+      <pre className="bc-feedback-pre">
+        {JSON.stringify(value, null, 2)}
+      </pre>
+    );
   }
   return <p>{String(value)}</p>;
 }
@@ -101,7 +113,10 @@ function CriterionCard({ crit, value }) {
           <span className="crit-short" style={{ background: color }}>
             {crit.short}
           </span>
-          <span className="crit-label">{crit.label}</span>
+          <div className="crit-text">
+            <span className="crit-label">{crit.label}</span>
+            <span className="crit-sub">{bandLabel(value)}</span>
+          </div>
         </div>
         <div className="crit-value" style={{ color }}>
           {value != null ? Number(value).toFixed(1) : '—'}
@@ -136,11 +151,12 @@ export default function App() {
     try { localStorage.setItem('bandcheck-theme', theme); } catch (_) {}
   }, [theme]);
 
-  const copy         = TASK_COPY[task];
-  const wordCount    = useMemo(() => countWords(essay),      [essay]);
-  const sentenceCount= useMemo(() => countSentences(essay),  [essay]);
-  const paragraphCount=useMemo(() => countParagraphs(essay), [essay]);
-  const wordOk       = wordCount >= copy.minWords;
+  const copy          = TASK_COPY[task];
+  const wordCount     = useMemo(() => countWords(essay),      [essay]);
+  const sentenceCount = useMemo(() => countSentences(essay),  [essay]);
+  const paragraphCount= useMemo(() => countParagraphs(essay), [essay]);
+  const wordOk        = wordCount >= copy.minWords;
+  const progress      = Math.min(100, (wordCount / copy.minWords) * 100);
 
   const handleEvaluate = async (e) => {
     e.preventDefault();
@@ -197,32 +213,24 @@ export default function App() {
 
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
 
-  // FIX: Defensive feedbackEntries — handles null, string, malformed object
   const feedbackEntries = useMemo(() => {
     if (!results?.feedback) return [];
-
-    // Case 1: feedback is a plain string
     if (typeof results.feedback === 'string') {
       const trimmed = results.feedback.trim();
       return trimmed ? [['overall', trimmed]] : [];
     }
-
-    // Case 2: feedback is a proper object (expected case)
     if (typeof results.feedback === 'object' && !Array.isArray(results.feedback)) {
       return Object.entries(results.feedback).filter(([, text]) => {
         if (text == null) return false;
         if (typeof text === 'string') return text.trim().length > 0;
-        return true; // keep objects/arrays — SafeText will render them
+        return true;
       });
     }
-
-    // Case 3: feedback is an array (unexpected but handle gracefully)
     if (Array.isArray(results.feedback)) {
       return results.feedback
         .map((item, i) => [String(i), item])
         .filter(([, text]) => text != null);
     }
-
     return [];
   }, [results]);
 
@@ -249,6 +257,7 @@ export default function App() {
             className="bc-theme-toggle"
             onClick={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
             aria-label="Toggle dark mode"
+            title="Toggle theme"
           >
             {theme === 'light' ? '🌙' : '☀️'}
           </button>
@@ -257,81 +266,130 @@ export default function App() {
 
       <main className="bc-main">
         <section className="bc-hero">
-          <h1>IELTS Writing Essay Checker</h1>
+          <span className="bc-hero-badge">✨ AI-Powered Evaluation</span>
+          <h1>Score Your IELTS Writing in Seconds</h1>
           <p>
-            Get an instant band score and AI-powered feedback for IELTS Writing
-            Task 1 and Task 2.
+            Get an instant band score and detailed AI feedback for IELTS
+            Writing Task 1 and Task 2 — across all four official criteria.
           </p>
         </section>
 
-        <div className="bc-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={task === 'task2'}
-            className={`bc-tab ${task === 'task2' ? 'active' : ''}`}
-            onClick={() => { setTask('task2'); setResults(null); setError(null); }}
-          >
-            Task 2 (Essay)
-          </button>
-          <button
-            role="tab"
-            aria-selected={task === 'task1'}
-            className={`bc-tab ${task === 'task1' ? 'active' : ''}`}
-            onClick={() => { setTask('task1'); setResults(null); setError(null); }}
-          >
-            Task 1 (Report)
-          </button>
-        </div>
-
-        <form className="bc-form" onSubmit={handleEvaluate}>
-          <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
-          <input
-            id="topic"
-            className="bc-input"
-            type="text"
-            placeholder={copy.topicPlaceholder}
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-          />
-
-          <div className="bc-essay-head">
-            <label className="bc-label" htmlFor="essay">Your Essay</label>
-            <span className={`bc-wordcount ${wordOk ? 'ok' : ''}`}>
-              {wordCount} words
-              <span className="bc-wordcount-hint"> / min {copy.minWords}</span>
-            </span>
+        <div className="bc-card">
+          <div className="bc-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={task === 'task2'}
+              className={`bc-tab ${task === 'task2' ? 'active' : ''}`}
+              onClick={() => { setTask('task2'); setResults(null); setError(null); }}
+            >
+              <span className="bc-tab-title">Task 2</span>
+              <span className="bc-tab-sub">Essay · 250+ words</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={task === 'task1'}
+              className={`bc-tab ${task === 'task1' ? 'active' : ''}`}
+              onClick={() => { setTask('task1'); setResults(null); setError(null); }}
+            >
+              <span className="bc-tab-title">Task 1</span>
+              <span className="bc-tab-sub">Report · 150+ words</span>
+            </button>
           </div>
 
-          <textarea
-            id="essay"
-            className="bc-textarea"
-            value={essay}
-            onChange={(e) => setEssay(e.target.value)}
-            placeholder={copy.essayPlaceholder}
-            rows={16}
-          />
+          <form className="bc-form" onSubmit={handleEvaluate}>
+            <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
+            <input
+              id="topic"
+              className="bc-input"
+              type="text"
+              placeholder={copy.topicPlaceholder}
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+            />
 
-          <button type="submit" className="bc-submit" disabled={loading}>
-            {loading ? (
-              <><span className="bc-spinner" /> Evaluating…</>
-            ) : (
-              'Evaluate Essay'
-            )}
-          </button>
+            <div className="bc-essay-head">
+              <label className="bc-label" htmlFor="essay">Your Essay</label>
+              <span className={`bc-wordcount ${wordOk ? 'ok' : ''}`}>
+                <span className="bc-wordcount-dot" />
+                {wordCount} / {copy.minWords} words
+              </span>
+            </div>
 
-          {error && <div className="bc-error">{error}</div>}
-        </form>
+            <div className="bc-progress">
+              <div
+                className={`bc-progress-fill ${wordOk ? 'ok' : ''}`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+
+            <textarea
+              id="essay"
+              className="bc-textarea"
+              value={essay}
+              onChange={(e) => setEssay(e.target.value)}
+              placeholder={copy.essayPlaceholder}
+              rows={16}
+            />
+
+            <div className="bc-form-footer">
+              <div className="bc-mini-stats">
+                <span>{sentenceCount} sentences</span>
+                <span className="dot">•</span>
+                <span>{paragraphCount} paragraphs</span>
+              </div>
+              <button type="submit" className="bc-submit" disabled={loading}>
+                {loading ? (
+                  <><span className="bc-spinner" /> Evaluating…</>
+                ) : (
+                  <>Evaluate Essay <span className="bc-arrow">→</span></>
+                )}
+              </button>
+            </div>
+
+            {error && <div className="bc-error">⚠️ {error}</div>}
+          </form>
+        </div>
 
         {results && (
           <section id="results" className="bc-results">
-            <h2 className="bc-results-title">Your Band Score</h2>
+            <h2 className="bc-results-title">Your Results</h2>
 
-            <div className="bc-overall">
-              <div className="bc-overall-label">Overall Band Score</div>
-              <div className="bc-overall-value">
-                {overall != null ? overall.toFixed(1) : '—'}
+            <div className="bc-overall-card">
+              <div className="bc-overall-left">
+                <div className="bc-overall-label">Overall Band Score</div>
+                <div
+                  className="bc-overall-value"
+                  style={{ color: bandColor(overall) }}
+                >
+                  {overall != null ? overall.toFixed(1) : '—'}
+                </div>
+                <div className="bc-overall-sub">
+                  out of 9.0 · <strong>{bandLabel(overall)}</strong>
+                </div>
               </div>
-              <div className="bc-overall-sub">out of 9.0</div>
+              <div className="bc-overall-ring" aria-hidden>
+                <svg viewBox="0 0 120 120" width="120" height="120">
+                  <circle
+                    cx="60" cy="60" r="52"
+                    fill="none"
+                    stroke="var(--ring-bg)"
+                    strokeWidth="10"
+                  />
+                  <circle
+                    cx="60" cy="60" r="52"
+                    fill="none"
+                    stroke={bandColor(overall)}
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 52}`}
+                    strokeDashoffset={`${
+                      2 * Math.PI * 52 * (1 - (overall || 0) / 9)
+                    }`}
+                    transform="rotate(-90 60 60)"
+                    style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+                  />
+                </svg>
+              </div>
             </div>
 
             <div className="bc-crit-grid">
@@ -346,7 +404,7 @@ export default function App() {
 
             {feedbackEntries.length > 0 ? (
               <div className="bc-feedback">
-                <h3>AI Feedback</h3>
+                <h3>📝 AI Feedback</h3>
                 {feedbackEntries.map(([key, text]) => (
                   <div className="bc-feedback-item" key={key}>
                     <div className="bc-feedback-label">
@@ -358,7 +416,7 @@ export default function App() {
               </div>
             ) : (
               <div className="bc-feedback">
-                <h3>AI Feedback</h3>
+                <h3>📝 AI Feedback</h3>
                 <p style={{ color: 'var(--text-muted)' }}>
                   No detailed feedback was returned. Try submitting a longer essay.
                 </p>
@@ -395,7 +453,7 @@ export default function App() {
       </main>
 
       <footer className="bc-footer">
-        <p>BandCheck — IELTS Writing Evaluator</p>
+        <p>BandCheck — IELTS Writing Evaluator · Built by -  NAKIB MAHMUD TANIM</p>
       </footer>
     </div>
   );
