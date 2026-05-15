@@ -38,11 +38,11 @@ const CRITERIA_TASK1 = [
   { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
 
-function bandColor(v) {
-  if (v == null) return 'var(--muted)';
-  if (v < 5) return '#e63946';
-  if (v < 6) return '#f59e0b';
-  if (v < 7) return '#d4a017';
+function getBandColor(value) {
+  if (value == null) return 'var(--muted)';
+  if (value < 5) return '#e63946';
+  if (value < 6) return '#f59e0b';
+  if (value < 7) return '#d4a017';
   return '#16a34a';
 }
 
@@ -51,11 +51,13 @@ function countWords(text) {
 }
 
 function countSentences(text) {
-  return (text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g) || []).length || (text.trim() ? 1 : 0);
+  return (
+    text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g) || []
+  ).length || (text.trim() ? 1 : 0);
 }
 
 function countParagraphs(text) {
-  return text.split(/\n\s*\n/).filter((p) => p.trim().length).length || (text.trim() ? 1 : 0);
+  return text.split(/\n\s*\n/).filter((block) => block.trim().length).length || (text.trim() ? 1 : 0);
 }
 
 function getFeedbackLabel(key, task) {
@@ -70,6 +72,7 @@ function getFeedbackLabel(key, task) {
 
 function normalizeFeedback(feedback) {
   if (!feedback) return [];
+
   if (Array.isArray(feedback)) {
     return feedback
       .map((item, index) => {
@@ -83,32 +86,40 @@ function normalizeFeedback(feedback) {
       })
       .filter(([, text]) => String(text || '').trim());
   }
+
   if (typeof feedback === 'string') {
     return feedback.trim() ? [['overall', feedback.trim()]] : [];
   }
+
   if (typeof feedback === 'object') {
     return Object.entries(feedback).filter(([, text]) => String(text || '').trim());
   }
+
   return [];
 }
 
 function CriterionCard({ crit, value }) {
-  const pct = value == null ? 0 : Math.max(0, Math.min(100, (value / 9) * 100));
-  const color = bandColor(value);
+  const progress = value == null ? 0 : Math.max(0, Math.min(100, (value / 9) * 100));
+  const color = getBandColor(value);
 
   return (
-    <div className="crit-card">
-      <div className="crit-head">
-        <div className="crit-name">
-          <span className="crit-short" style={{ background: color }}>{crit.short}</span>
-          <span className="crit-label">{crit.label}</span>
+    <div className="bc-criterion-card">
+      <div className="bc-criterion-head">
+        <div className="bc-criterion-name">
+          <span className="bc-criterion-short" style={{ background: color }}>
+            {crit.short}
+          </span>
+          <span className="bc-criterion-label">{crit.label}</span>
         </div>
-        <span className="crit-value" style={{ color }}>
+        <span className="bc-criterion-value" style={{ color }}>
           {value != null ? Number(value).toFixed(1) : '—'}
         </span>
       </div>
-      <div className="crit-bar">
-        <div className="crit-bar-fill" style={{ width: `${pct}%`, background: color }} />
+      <div className="bc-criterion-bar">
+        <div
+          className="bc-criterion-bar-fill"
+          style={{ width: `${progress}%`, background: color }}
+        />
       </div>
     </div>
   );
@@ -117,11 +128,13 @@ function CriterionCard({ crit, value }) {
 export default function App() {
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'light';
-    const saved = localStorage.getItem('bandcheck-theme');
-    if (saved === 'light' || saved === 'dark') return saved;
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
+
+    try {
+      const savedTheme = localStorage.getItem('bandcheck-theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+    } catch (_) {}
+
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
   const [task, setTask] = useState('task2');
@@ -133,22 +146,38 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('bandcheck-theme', theme);
+
+    try {
+      localStorage.setItem('bandcheck-theme', theme);
+    } catch (_) {}
   }, [theme]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = (e) => {
-      const saved = localStorage.getItem('bandcheck-theme');
-      if (saved === 'light' || saved === 'dark') return;
-      setTheme(e.matches ? 'dark' : 'light');
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleThemeChange = (event) => {
+      try {
+        const savedTheme = localStorage.getItem('bandcheck-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') return;
+      } catch (_) {}
+
+      setTheme(event.matches ? 'dark' : 'light');
     };
-    if (mq.addEventListener) mq.addEventListener('change', handler);
-    else if (mq.addListener) mq.addListener(handler);
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleThemeChange);
+    } else {
+      mediaQuery.addListener(handleThemeChange);
+    }
+
     return () => {
-      if (mq.removeEventListener) mq.removeEventListener('change', handler);
-      else if (mq.removeListener) mq.removeListener(handler);
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handleThemeChange);
+      } else {
+        mediaQuery.removeListener(handleThemeChange);
+      }
     };
   }, []);
 
@@ -156,49 +185,57 @@ export default function App() {
   const wordCount = useMemo(() => countWords(essay), [essay]);
   const sentenceCount = useMemo(() => countSentences(essay), [essay]);
   const paragraphCount = useMemo(() => countParagraphs(essay), [essay]);
-  const wordOk = wordCount >= copy.minWords;
+  const hasRequiredWords = wordCount >= copy.minWords;
+  const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
+  const feedbackEntries = normalizeFeedback(results?.feedback);
+  const overall = typeof results?.bandScores?.overall === 'number' ? results.bandScores.overall : null;
 
-  const handleEvaluate = async (e) => {
-    e.preventDefault();
-    setError(null);
+  const resetEvaluationState = () => {
     setResults(null);
+    setError(null);
+  };
+
+  const switchTask = (nextTask) => {
+    setTask(nextTask);
+    resetEvaluationState();
+  };
+
+  const handleEvaluate = async (event) => {
+    event.preventDefault();
+    resetEvaluationState();
 
     if (essay.trim().length < 20) {
       setError('Please write at least a few sentences before evaluating.');
       return;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
     setLoading(true);
 
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
-
-      const res = await fetch(`${API}/evaluate`, {
+      const response = await fetch(`${API}/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task, topic, essay }),
         signal: controller.signal,
       });
 
-      clearTimeout(timeout);
-
       let data = {};
       try {
-        data = await res.json();
-      } catch {
+        data = await response.json();
+      } catch (_) {
         throw new Error('Invalid server response');
       }
 
-      if (!res.ok) {
+      if (!response.ok) {
         throw new Error(data.error || data.message || 'Evaluation failed');
       }
 
       setResults(data);
 
-      setTimeout(() => {
-        const el = document.getElementById('results');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.setTimeout(() => {
+        document.getElementById('results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -207,35 +244,31 @@ export default function App() {
         setError(err.message || 'Something went wrong.');
       }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
 
-  const overall = typeof results?.bandScores?.overall === 'number'
-    ? results.bandScores.overall
-    : null;
-
-  const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
-  const feedbackEntries = normalizeFeedback(results?.feedback);
-
   return (
-    <div className="bc-root" data-theme={theme}>
+    <div className="bc-root">
       <header className="bc-header">
         <div className="bc-header-inner">
-          <div className="bc-brand">
-            <div className="bc-logo">
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
+          <div className="bc-brand" aria-label="BandCheck brand">
+            <div className="bc-logo-shell">
+              <div className="bc-logo-mark" aria-hidden="true">
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.25"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+              </div>
             </div>
 
             <div className="bc-brand-text">
@@ -246,43 +279,33 @@ export default function App() {
 
           <button
             className="bc-theme-toggle"
-            onClick={() => {
-              setTheme((t) => {
-                const next = t === 'light' ? 'dark' : 'light';
-                try {
-                  localStorage.setItem('bandcheck-theme', next);
-                } catch (_) {}
-                return next;
-              });
-            }}
-            aria-label="Toggle dark mode"
+            onClick={() => setTheme((currentTheme) => (currentTheme === 'light' ? 'dark' : 'light'))}
+            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            type="button"
           >
-            {theme === 'light' ? '🌙' : '☀️'}
+            <span aria-hidden="true">{theme === 'light' ? '🌙' : '☀️'}</span>
           </button>
         </div>
       </header>
 
       <main className="bc-main">
-        <div className="bc-hero">
-          <h1>IELTS Writing Essay Checker</h1>
-          <div className="bc-author bc-author--hero">
-            AUTHOR &mdash; <span className="bc-author-name">NAKIB MAHMUD TANIM</span>
+        <section className="bc-hero">
+          <h1 className="bc-hero-title">IELTS Writing Essay Checker</h1>
+          <div className="bc-author">
+            Author — <span className="bc-author-name">Nakib Mahmud Tanim</span>
           </div>
-          <p>
+          <p className="bc-hero-text">
             Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.
           </p>
-        </div>
+        </section>
 
-        <div className="bc-tabs" role="tablist">
+        <div className="bc-tabs" role="tablist" aria-label="IELTS writing task selector">
           <button
             role="tab"
             aria-selected={task === 'task2'}
             className={`bc-tab${task === 'task2' ? ' active' : ''}`}
-            onClick={() => {
-              setTask('task2');
-              setResults(null);
-              setError(null);
-            }}
+            onClick={() => switchTask('task2')}
+            type="button"
           >
             Task 2 (Essay)
           </button>
@@ -290,11 +313,8 @@ export default function App() {
             role="tab"
             aria-selected={task === 'task1'}
             className={`bc-tab${task === 'task1' ? ' active' : ''}`}
-            onClick={() => {
-              setTask('task1');
-              setResults(null);
-              setError(null);
-            }}
+            onClick={() => switchTask('task1')}
+            type="button"
           >
             Task 1 (Report)
           </button>
@@ -310,14 +330,14 @@ export default function App() {
             type="text"
             placeholder={copy.topicPlaceholder}
             value={topic}
-            onChange={(e) => setTopic(e.target.value)}
+            onChange={(event) => setTopic(event.target.value)}
           />
 
           <div className="bc-essay-head">
-            <label className="bc-label" htmlFor="essay" style={{ margin: 0 }}>
+            <label className="bc-label bc-label--inline" htmlFor="essay">
               Your Essay
             </label>
-            <span className={`bc-wordcount${wordOk ? ' ok' : ''}`}>
+            <span className={`bc-wordcount${hasRequiredWords ? ' ok' : ''}`}>
               {wordCount} words <span className="bc-wordcount-hint">/ min {copy.minWords}</span>
             </span>
           </div>
@@ -326,7 +346,7 @@ export default function App() {
             id="essay"
             className="bc-textarea"
             value={essay}
-            onChange={(e) => setEssay(e.target.value)}
+            onChange={(event) => setEssay(event.target.value)}
             placeholder={copy.essayPlaceholder}
             rows={16}
           />
@@ -334,7 +354,7 @@ export default function App() {
           <button type="submit" className="bc-submit" disabled={loading}>
             {loading ? (
               <>
-                <span className="bc-spinner" /> Evaluating&hellip;
+                <span className="bc-spinner" /> Evaluating…
               </>
             ) : (
               'Evaluate Essay'
@@ -350,24 +370,22 @@ export default function App() {
 
             <div className="bc-overall">
               <div className="bc-overall-label">Overall Band Score</div>
-              <div className="bc-overall-value">
-                {overall != null ? overall.toFixed(1) : '—'}
-              </div>
+              <div className="bc-overall-value">{overall != null ? overall.toFixed(1) : '—'}</div>
               <div className="bc-overall-sub">out of 9.0</div>
             </div>
 
-            <div className="bc-crit-grid">
-              {criteria.map((c) => {
-                const safeValue =
-                  results?.bandScores?.[c.key] ??
+            <div className="bc-criteria-grid">
+              {criteria.map((criterion) => {
+                const score =
+                  results?.bandScores?.[criterion.key] ??
                   results?.bandScores?.taskAchievement ??
                   results?.bandScores?.taskResponse;
 
                 return (
                   <CriterionCard
-                    key={`${task}-${c.key}-${c.label}`}
-                    crit={c}
-                    value={safeValue}
+                    key={`${task}-${criterion.key}-${criterion.label}`}
+                    crit={criterion}
+                    value={score}
                   />
                 );
               })}
@@ -378,9 +396,7 @@ export default function App() {
                 <h3>AI Feedback</h3>
                 {feedbackEntries.map(([key, text]) => (
                   <div className="bc-feedback-item" key={key}>
-                    <div className="bc-feedback-label">
-                      {getFeedbackLabel(key, task)}
-                    </div>
+                    <div className="bc-feedback-label">{getFeedbackLabel(key, task)}</div>
                     <p>{typeof text === 'string' ? text : JSON.stringify(text)}</p>
                   </div>
                 ))}
@@ -388,15 +404,15 @@ export default function App() {
             )}
 
             <div className="bc-stats">
-              <div className="bc-stat">
+              <div className="bc-stat-card">
                 <div className="bc-stat-value">{results.counts?.words ?? wordCount}</div>
                 <div className="bc-stat-label">Words</div>
               </div>
-              <div className="bc-stat">
+              <div className="bc-stat-card">
                 <div className="bc-stat-value">{results.counts?.sentences ?? sentenceCount}</div>
                 <div className="bc-stat-label">Sentences</div>
               </div>
-              <div className="bc-stat">
+              <div className="bc-stat-card">
                 <div className="bc-stat-value">{results.counts?.paragraphs ?? paragraphCount}</div>
                 <div className="bc-stat-label">Paragraphs</div>
               </div>
@@ -406,8 +422,10 @@ export default function App() {
               <div className="bc-warnings">
                 <strong>Note:</strong> Some AI services returned partial results.
                 <ul>
-                  {Object.entries(results.warnings).map(([k, v]) => (
-                    <li key={k}>{k}: {v}</li>
+                  {Object.entries(results.warnings).map(([service, message]) => (
+                    <li key={service}>
+                      {service}: {message}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -417,7 +435,7 @@ export default function App() {
       </main>
 
       <footer className="bc-footer">
-        <div className="bc-footer-brand">BandCheck &mdash; IELTS Writing Evaluator</div>
+        <div className="bc-footer-brand">BandCheck — IELTS Writing Evaluator</div>
       </footer>
     </div>
   );
