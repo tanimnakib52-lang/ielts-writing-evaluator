@@ -62,7 +62,7 @@ function countParagraphs(text) {
 }
 
 function getFeedbackLabel(key, task) {
-  if (key === 'taskResponse')      return 'Task Response';
+  if (key === 'taskResponse')      return task === 'task1' ? 'Task Achievement' : 'Task Response';
   if (key === 'taskAchievement')   return 'Task Achievement';
   if (key === 'coherenceCohesion') return 'Coherence & Cohesion';
   if (key === 'lexicalResource')   return 'Lexical Resource';
@@ -71,7 +71,6 @@ function getFeedbackLabel(key, task) {
   return key;
 }
 
-// Safe text renderer — handles string, object, array gracefully
 function SafeText({ value }) {
   if (value == null) return null;
   if (typeof value === 'string') return <p>{value}</p>;
@@ -124,8 +123,13 @@ function CriterionCard({ crit, value }) {
 export default function App() {
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'light';
-    try { return localStorage.getItem('bandcheck-theme') || 'light'; }
-    catch { return 'light'; }
+    try {
+      const saved = localStorage.getItem('bandcheck-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
   });
 
   const [task,    setTask]    = useState('task2');
@@ -195,58 +199,45 @@ export default function App() {
     }
   };
 
-  const overall   = typeof results?.bandScores?.overall === 'number'
-    ? results.bandScores.overall
-    : null;
-
+  const overall  = typeof results?.bandScores?.overall === 'number' ? results.bandScores.overall : null;
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
 
-  // FIX: Exclude the irrelevant task key so duplicate entries don't appear.
-  // Backend echoes both taskResponse + taskAchievement; we only show the one
-  // that matches the current task.
   const feedbackEntries = useMemo(() => {
     if (!results?.feedback) return [];
-
-    // Case 1: feedback is a plain string
     if (typeof results.feedback === 'string') {
       const trimmed = results.feedback.trim();
       return trimmed ? [['overall', trimmed]] : [];
     }
-
-    // Case 2: feedback is a proper object (expected case)
     if (typeof results.feedback === 'object' && !Array.isArray(results.feedback)) {
-      return Object.entries(results.feedback).filter(([key, text]) => {
-        // Drop the criterion that doesn't belong to this task
-        if (key === 'taskAchievement' && task === 'task2') return false;
-        if (key === 'taskResponse'    && task === 'task1') return false;
-
+      return Object.entries(results.feedback).filter(([, text]) => {
         if (text == null) return false;
         if (typeof text === 'string') return text.trim().length > 0;
-        return true; // keep objects/arrays — SafeText handles them
+        return true;
       });
     }
-
-    // Case 3: feedback is an array (unexpected but handle gracefully)
     if (Array.isArray(results.feedback)) {
       return results.feedback
         .map((item, i) => [String(i), item])
         .filter(([, text]) => text != null);
     }
-
     return [];
-  }, [results, task]);
+  }, [results]);
 
   return (
     <div className="bc-root">
+
+      {/* ── HEADER ── */}
       <header className="bc-header">
         <div className="bc-header-inner">
+
+          {/* Logo: icon square + text column, side by side */}
           <div className="bc-brand">
-            <div className="bc-logo" aria-hidden>
-              <svg viewBox="0 0 32 32" width="28" height="28">
-                <rect x="2"  y="14" width="4" height="14" rx="1.5" fill="currentColor" />
-                <rect x="9"  y="8"  width="4" height="20" rx="1.5" fill="currentColor" />
-                <rect x="16" y="2"  width="4" height="26" rx="1.5" fill="currentColor" />
-                <rect x="23" y="10" width="4" height="18" rx="1.5" fill="currentColor" />
+            <div className="bc-logo" aria-hidden="true">
+              <svg viewBox="0 0 32 32" width="22" height="22" fill="currentColor">
+                <rect x="2"  y="14" width="4" height="14" rx="1.5" />
+                <rect x="9"  y="8"  width="4" height="20" rx="1.5" />
+                <rect x="16" y="2"  width="4" height="26" rx="1.5" />
+                <rect x="23" y="10" width="4" height="18" rx="1.5" />
               </svg>
             </div>
             <div className="bc-brand-text">
@@ -255,6 +246,7 @@ export default function App() {
             </div>
           </div>
 
+          {/* Theme toggle — pinned to the right via margin-left: auto in CSS */}
           <button
             className="bc-theme-toggle"
             onClick={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
@@ -262,11 +254,15 @@ export default function App() {
           >
             {theme === 'light' ? '🌙' : '☀️'}
           </button>
+
         </div>
       </header>
 
+      {/* ── MAIN ── */}
       <main className="bc-main">
+
         <section className="bc-hero">
+          <div className="bc-hero-badge">AI-Powered Feedback</div>
           <h1>IELTS Writing Essay Checker</h1>
           <p>
             Get an instant band score and AI-powered feedback for IELTS Writing
@@ -274,74 +270,98 @@ export default function App() {
           </p>
         </section>
 
-        <div className="bc-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={task === 'task2'}
-            className={`bc-tab ${task === 'task2' ? 'active' : ''}`}
-            onClick={() => { setTask('task2'); setResults(null); setError(null); }}
-          >
-            Task 2 (Essay)
-          </button>
-          <button
-            role="tab"
-            aria-selected={task === 'task1'}
-            className={`bc-tab ${task === 'task1' ? 'active' : ''}`}
-            onClick={() => { setTask('task1'); setResults(null); setError(null); }}
-          >
-            Task 1 (Report)
-          </button>
-        </div>
-
-        <form className="bc-form" onSubmit={handleEvaluate}>
-          <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
-          <input
-            id="topic"
-            className="bc-input"
-            type="text"
-            placeholder={copy.topicPlaceholder}
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-          />
-
-          <div className="bc-essay-head">
-            <label className="bc-label" htmlFor="essay">Your Essay</label>
-            <span className={`bc-wordcount ${wordOk ? 'ok' : ''}`}>
-              {wordCount} words
-              <span className="bc-wordcount-hint"> / min {copy.minWords}</span>
-            </span>
+        <div className="bc-card">
+          <div className="bc-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={task === 'task2'}
+              className={`bc-tab${task === 'task2' ? ' active' : ''}`}
+              onClick={() => { setTask('task2'); setResults(null); setError(null); }}
+            >
+              <span className="bc-tab-title">Task 2 (Essay)</span>
+              <span className="bc-tab-sub">250 words minimum</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={task === 'task1'}
+              className={`bc-tab${task === 'task1' ? ' active' : ''}`}
+              onClick={() => { setTask('task1'); setResults(null); setError(null); }}
+            >
+              <span className="bc-tab-title">Task 1 (Report)</span>
+              <span className="bc-tab-sub">150 words minimum</span>
+            </button>
           </div>
 
-          <textarea
-            id="essay"
-            className="bc-textarea"
-            value={essay}
-            onChange={(e) => setEssay(e.target.value)}
-            placeholder={copy.essayPlaceholder}
-            rows={16}
-          />
+          <form className="bc-form" onSubmit={handleEvaluate}>
+            <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
+            <input
+              id="topic"
+              className="bc-input"
+              type="text"
+              placeholder={copy.topicPlaceholder}
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+            />
 
-          <button type="submit" className="bc-submit" disabled={loading}>
-            {loading ? (
-              <><span className="bc-spinner" /> Evaluating…</>
-            ) : (
-              'Evaluate Essay'
-            )}
-          </button>
+            <div className="bc-essay-head">
+              <label className="bc-label" htmlFor="essay">Your Essay</label>
+              <span className={`bc-wordcount${wordOk ? ' ok' : ''}`}>
+                <span className="bc-wordcount-dot" />
+                {wordCount} / min {copy.minWords} words
+              </span>
+            </div>
 
-          {error && <div className="bc-error">{error}</div>}
-        </form>
+            <div className="bc-progress">
+              <div
+                className={`bc-progress-fill${wordOk ? ' ok' : ''}`}
+                style={{ width: `${Math.min(100, (wordCount / copy.minWords) * 100)}%` }}
+              />
+            </div>
 
+            <textarea
+              id="essay"
+              className="bc-textarea"
+              value={essay}
+              onChange={(e) => setEssay(e.target.value)}
+              placeholder={copy.essayPlaceholder}
+              rows={14}
+            />
+
+            <div className="bc-form-footer">
+              <div className="bc-mini-stats">
+                <span>{sentenceCount} sentences</span>
+                <span className="dot">·</span>
+                <span>{paragraphCount} paragraphs</span>
+              </div>
+              <button type="submit" className="bc-submit" disabled={loading}>
+                {loading ? (
+                  <><span className="bc-spinner" /> Evaluating…</>
+                ) : (
+                  <>Evaluate Essay <span className="bc-arrow">→</span></>
+                )}
+              </button>
+            </div>
+
+            {error && <div className="bc-error">{error}</div>}
+          </form>
+        </div>
+
+        {/* ── RESULTS ── */}
         {results && (
           <section id="results" className="bc-results">
             <h2 className="bc-results-title">Your Band Score</h2>
 
-            <div className="bc-overall">
-              <div className="bc-overall-label">Overall Band Score</div>
-              <div className="bc-overall-value">
-                {overall != null ? overall.toFixed(1) : '—'}
+            <div className="bc-overall-card">
+              <div>
+                <div className="bc-overall-label">Overall Band Score</div>
+                <div
+                  className="bc-overall-value"
+                  style={{ color: bandColor(overall) }}
+                >
+                  {overall != null ? overall.toFixed(1) : '—'}
+                </div>
+                <div className="bc-overall-sub">out of 9.0</div>
               </div>
-              <div className="bc-overall-sub">out of 9.0</div>
             </div>
 
             <div className="bc-crit-grid">
