@@ -275,10 +275,19 @@ export default function App() {
               ))}
             </div>
 
-            {feedbackEntries.length > 0 && (
-              <div className="bc-feedback">
-                <h3>AI Feedback</h3>
-                {feedbackEntries.map(([key, text]) => (
+            <div className="bc-feedback">
+              <h3>AI Feedback</h3>
+
+              <div style={{ background: 'yellow', color: 'black', padding: 10, marginBottom: 12, borderRadius: 8, fontWeight: 700 }}>
+                feedbackEntries: {feedbackEntries.length}
+              </div>
+
+              <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto', background: 'var(--bg-alt)', padding: 12, borderRadius: 8, border: '1px solid var(--border)', marginBottom: 16 }}>
+                {JSON.stringify(results?.feedback, null, 2)}
+              </pre>
+
+              {feedbackEntries.length > 0 ? (
+                feedbackEntries.map(([key, text]) => (
                   <div className="bc-feedback-item" key={key}>
                     <div className="bc-feedback-label">
                       {getFeedbackLabel(key, task)}
@@ -289,9 +298,11 @@ export default function App() {
                         : JSON.stringify(text, null, 2)}
                     </p>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              ) : (
+                <p style={{ color: 'red', fontWeight: 700 }}>No mapped feedback entries found.</p>
+              )}
+            </div>
 
             <div className="bc-stats">
               <div className="bc-stat">
