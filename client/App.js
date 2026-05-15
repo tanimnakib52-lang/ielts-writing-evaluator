@@ -73,34 +73,6 @@ function getFeedbackLabel(key, task) {
   return key;
 }
 
-function normalizeFeedback(feedback) {
-  if (!feedback) return [];
-
-  if (Array.isArray(feedback)) {
-    return feedback
-      .map((item, index) => {
-        if (typeof item === 'string') return [`feedback-${index}`, item];
-        if (item && typeof item === 'object') {
-          if (item.label && item.text) return [item.label, item.text];
-          if (item.key && item.text) return [item.key, item.text];
-          return [`feedback-${index}`, JSON.stringify(item)];
-        }
-        return [`feedback-${index}`, String(item)];
-      })
-      .filter(([, text]) => String(text || '').trim());
-  }
-
-  if (typeof feedback === 'string') {
-    return feedback.trim() ? [['overall', feedback.trim()]] : [];
-  }
-
-  if (typeof feedback === 'object') {
-    return Object.entries(feedback).filter(([, text]) => String(text || '').trim());
-  }
-
-  return [];
-}
-
 function CriterionCard({ crit, value }) {
   const pct = value == null ? 0 : Math.max(0, Math.min(100, (value / 9) * 100));
   const color = bandColor(value);
@@ -221,7 +193,33 @@ export default function App() {
 
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
 
-  const feedbackEntries = normalizeFeedback(results?.feedback);
+  const feedbackEntries = useMemo(() => {
+    if (!results?.feedback) return [];
+
+    if (Array.isArray(results.feedback)) {
+      return results.feedback
+        .map((item, index) => {
+          if (typeof item === 'string') return [`feedback-${index}`, item];
+          if (item && typeof item === 'object') {
+            if (item.label && item.text) return [item.label, item.text];
+            if (item.key && item.text) return [item.key, item.text];
+            return [`feedback-${index}`, JSON.stringify(item)];
+          }
+          return [`feedback-${index}`, String(item)];
+        })
+        .filter(([, text]) => String(text || '').trim());
+    }
+
+    if (typeof results.feedback === 'string') {
+      return results.feedback.trim() ? [['overall', results.feedback.trim()]] : [];
+    }
+
+    if (typeof results.feedback === 'object') {
+      return Object.entries(results.feedback).filter(([, text]) => String(text || '').trim());
+    }
+
+    return [];
+  }, [results]);
 
   return (
     <div className="bc-root">
