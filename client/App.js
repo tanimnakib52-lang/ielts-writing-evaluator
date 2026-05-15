@@ -51,14 +51,13 @@ function countParagraphs(text) {
   return text.split(/\n\s*\n/).filter(p => p.trim().length).length || (text.trim() ? 1 : 0);
 }
 
-// Helper: human-readable label for feedback keys
 function getFeedbackLabel(key, task) {
-  if (key === 'taskResponse')      return task === 'task1' ? 'Task Achievement' : 'Task Response';
-  if (key === 'taskAchievement')   return 'Task Achievement';
+  if (key === 'taskResponse') return task === 'task1' ? 'Task Achievement' : 'Task Response';
+  if (key === 'taskAchievement') return 'Task Achievement';
   if (key === 'coherenceCohesion') return 'Coherence & Cohesion';
-  if (key === 'lexicalResource')   return 'Lexical Resource';
-  if (key === 'grammaticalRange')  return 'Grammatical Range & Accuracy';
-  if (key === 'overall')           return 'Overall Feedback';
+  if (key === 'lexicalResource') return 'Lexical Resource';
+  if (key === 'grammaticalRange') return 'Grammatical Range & Accuracy';
+  if (key === 'overall') return 'Overall Feedback';
   return key;
 }
 
@@ -118,9 +117,9 @@ export default function App() {
   }, []);
 
   const copy = TASK_COPY[task];
-  const wordCount     = useMemo(() => countWords(essay),     [essay]);
+  const wordCount = useMemo(() => countWords(essay), [essay]);
   const sentenceCount = useMemo(() => countSentences(essay), [essay]);
-  const paragraphCount= useMemo(() => countParagraphs(essay),[essay]);
+  const paragraphCount = useMemo(() => countParagraphs(essay), [essay]);
   const wordOk = wordCount >= copy.minWords;
 
   const handleEvaluate = async (e) => {
@@ -152,19 +151,16 @@ export default function App() {
     }
   };
 
-  const overall  = results?.bandScores?.overall;
+  const overall = results?.bandScores?.overall;
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
 
-  // ✅ FIX: feedback is an OBJECT from API, not an array
   const feedbackEntries = useMemo(() => {
     if (!results?.feedback) return [];
 
-    // Case: feedback is a plain string (fallback)
     if (typeof results.feedback === 'string') {
       return results.feedback.trim() ? [['overall', results.feedback.trim()]] : [];
     }
 
-    // Case: feedback is a proper object (normal API response)
     if (typeof results.feedback === 'object' && !Array.isArray(results.feedback)) {
       return Object.entries(results.feedback).filter(([, text]) => {
         if (text == null) return false;
@@ -173,7 +169,6 @@ export default function App() {
       });
     }
 
-    // Case: feedback is an array (unexpected, handle gracefully)
     if (Array.isArray(results.feedback)) {
       return results.feedback
         .map((item, i) => [String(i), item])
@@ -280,7 +275,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* ✅ FIXED: was Array.isArray(results.feedback) — feedback is an object! */}
             {feedbackEntries.length > 0 && (
               <div className="bc-feedback">
                 <h3>AI Feedback</h3>
