@@ -8,36 +8,44 @@ const TASK_COPY = {
     label: 'Task 2',
     minWords: 250,
     topicLabel: 'Essay Question / Topic',
-    topicPlaceholder: 'e.g., Some people think that universities should provide free education. To what extent do you agree or disagree?',
-    essayPlaceholder: 'Paste or type your IELTS Task 2 essay here. Aim for at least 250 words across an introduction, two body paragraphs and a conclusion.',
+    topicPlaceholder:
+      'e.g., Some people think that universities should provide free education. To what extent do you agree or disagree?',
+    essayPlaceholder:
+      'Paste or type your IELTS Task 2 essay here. Aim for at least 250 words across an introduction, two body paragraphs and a conclusion.',
+    tabTitle: 'Task 2',
+    tabSub: 'Essay',
   },
   task1: {
     label: 'Task 1',
     minWords: 150,
     topicLabel: 'Chart / Diagram Description',
-    topicPlaceholder: 'e.g., The graph below shows the percentage of households in different income brackets in three countries between 2000 and 2020.',
-    essayPlaceholder: 'Paste or type your IELTS Task 1 report here. Aim for at least 150 words summarising the main features of the chart, graph, or diagram.',
+    topicPlaceholder:
+      'e.g., The graph below shows the percentage of households in different income brackets in three countries between 2000 and 2020.',
+    essayPlaceholder:
+      'Paste or type your IELTS Task 1 report here. Aim for at least 150 words summarising the main features of the chart, graph, or diagram.',
+    tabTitle: 'Task 1',
+    tabSub: 'Report',
   },
 };
 
 const CRITERIA_TASK2 = [
-  { key: 'taskResponse',       short: 'TR',  label: 'Task Response' },
-  { key: 'coherenceCohesion',  short: 'CC',  label: 'Coherence & Cohesion' },
-  { key: 'lexicalResource',    short: 'LR',  label: 'Lexical Resource' },
-  { key: 'grammaticalRange',   short: 'GRA', label: 'Grammatical Range & Accuracy' },
+  { key: 'taskResponse', short: 'TR', label: 'Task Response' },
+  { key: 'coherenceCohesion', short: 'CC', label: 'Coherence & Cohesion' },
+  { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
+  { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
 const CRITERIA_TASK1 = [
-  { key: 'taskAchievement',    short: 'TA',  label: 'Task Achievement' },
-  { key: 'coherenceCohesion',  short: 'CC',  label: 'Coherence & Cohesion' },
-  { key: 'lexicalResource',    short: 'LR',  label: 'Lexical Resource' },
-  { key: 'grammaticalRange',   short: 'GRA', label: 'Grammatical Range & Accuracy' },
+  { key: 'taskAchievement', short: 'TA', label: 'Task Achievement' },
+  { key: 'coherenceCohesion', short: 'CC', label: 'Coherence & Cohesion' },
+  { key: 'lexicalResource', short: 'LR', label: 'Lexical Resource' },
+  { key: 'grammaticalRange', short: 'GRA', label: 'Grammatical Range & Accuracy' },
 ];
 
 function bandColor(v) {
   if (v == null) return 'var(--muted)';
-  if (v < 5)  return '#e63946';
-  if (v < 6)  return '#f59e0b';
-  if (v < 7)  return '#d4a017';
+  if (v < 5) return '#e63946';
+  if (v < 6) return '#f59e0b';
+  if (v < 7) return '#d4a017';
   return '#16a34a';
 }
 
@@ -48,65 +56,59 @@ function countSentences(text) {
   return (text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g) || []).length || (text.trim() ? 1 : 0);
 }
 function countParagraphs(text) {
-  return text.split(/\n\s*\n/).filter(p => p.trim().length).length || (text.trim() ? 1 : 0);
+  return text.split(/\n\s*\n/).filter((p) => p.trim().length).length || (text.trim() ? 1 : 0);
+}
+
+function getFeedbackLabel(key, task) {
+  if (key === 'taskResponse') return task === 'task1' ? 'Task Achievement' : 'Task Response';
+  if (key === 'taskAchievement') return 'Task Achievement';
+  if (key === 'coherenceCohesion') return 'Coherence & Cohesion';
+  if (key === 'lexicalResource') return 'Lexical Resource';
+  if (key === 'grammaticalRange') return 'Grammatical Range & Accuracy';
+  if (key === 'overall') return 'Overall Feedback';
+  return key;
+}
+
+function normalizeFeedback(feedback) {
+  if (!feedback) return [];
+  if (Array.isArray(feedback)) {
+    return feedback
+      .map((item, index) => {
+        if (typeof item === 'string') return [`feedback-${index}`, item];
+        if (item && typeof item === 'object') {
+          if (item.label && item.text) return [item.label, item.text];
+          if (item.key && item.text) return [item.key, item.text];
+          return [`feedback-${index}`, JSON.stringify(item)];
+        }
+        return [`feedback-${index}`, String(item)];
+      })
+      .filter(([, text]) => String(text || '').trim());
+  }
+  if (typeof feedback === 'string') {
+    return feedback.trim() ? [['overall', feedback.trim()]] : [];
+  }
+  if (typeof feedback === 'object') {
+    return Object.entries(feedback).filter(([, text]) => String(text || '').trim());
+  }
+  return [];
 }
 
 function CriterionCard({ crit, value }) {
-  const pct   = value == null ? 0 : Math.max(0, Math.min(100, (value / 9) * 100));
+  const pct = value == null ? 0 : Math.max(0, Math.min(100, (value / 9) * 100));
   const color = bandColor(value);
   return (
     <div className="crit-card">
       <div className="crit-head">
         <div className="crit-name">
-          <span className="crit-short">{crit.short}</span>
-          {crit.label}
+          <span className="crit-short" style={{ background: color }}>{crit.short}</span>
+          <span className="crit-label">{crit.label}</span>
         </div>
-        <div className="crit-score" style={{ color }}>
-          {value != null ? value.toFixed(1) : '\u2014'}
-        </div>
+        <span className="crit-value" style={{ color }}>{value != null ? Number(value).toFixed(1) : '—'}</span>
       </div>
       <div className="crit-bar">
         <div className="crit-bar-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
-  );
-}
-
-const FEEDBACK_LABELS = {
-  taskResponse:     'Task Response',
-  taskAchievement:  'Task Achievement',
-  coherenceCohesion:'Coherence & Cohesion',
-  lexicalResource:  'Lexical Resource',
-  grammaticalRange: 'Grammatical Range & Accuracy',
-  overall:          'Overall Feedback',
-};
-
-// ── Standalone SVG logo mark ──────────────────────────────────────────────────
-// Renders the teal rounded-square with a white checkmark exactly as intended,
-// with no dependency on emoji rendering or Unicode glyph availability.
-function LogoMark({ size = 40 }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      style={{ flexShrink: 0, borderRadius: 10, display: 'block' }}
-    >
-      {/* teal background */}
-      <rect width="40" height="40" rx="10" fill="#2a9d8f" />
-      {/* white checkmark */}
-      <polyline
-        points="10,21 17,28 30,13"
-        stroke="white"
-        strokeWidth="3.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </svg>
   );
 }
 
@@ -117,15 +119,16 @@ export default function App() {
     if (saved === 'light' || saved === 'dark') return saved;
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
-  const [task,    setTask]    = useState('task2');
-  const [topic,   setTopic]   = useState('');
-  const [essay,   setEssay]   = useState('');
+  const [task, setTask] = useState('task2');
+  const [topic, setTopic] = useState('');
+  const [essay, setEssay] = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('bandcheck-theme', theme);
   }, [theme]);
 
   useEffect(() => {
@@ -136,18 +139,19 @@ export default function App() {
       if (saved === 'light' || saved === 'dark') return;
       setTheme(e.matches ? 'dark' : 'light');
     };
-    if (mq.addEventListener)    mq.addEventListener('change', handler);
-    else if (mq.addListener)    mq.addListener(handler);
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else if (mq.addListener) mq.addListener(handler);
     return () => {
       if (mq.removeEventListener) mq.removeEventListener('change', handler);
       else if (mq.removeListener) mq.removeListener(handler);
     };
   }, []);
 
-  const copy          = TASK_COPY[task];
-  const wordCount     = useMemo(() => countWords(essay),     [essay]);
+  const copy = TASK_COPY[task];
+  const wordCount = useMemo(() => countWords(essay), [essay]);
   const sentenceCount = useMemo(() => countSentences(essay), [essay]);
-  const paragraphCount= useMemo(() => countParagraphs(essay),[essay]);
+  const paragraphCount = useMemo(() => countParagraphs(essay), [essay]);
+  const wordOk = wordCount >= copy.minWords;
 
   const handleEvaluate = async (e) => {
     e.preventDefault();
@@ -159,12 +163,21 @@ export default function App() {
     }
     setLoading(true);
     try {
-      const res  = await fetch(`${API}/evaluate`, {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      const res = await fetch(`${API}/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task, topic, essay }),
+        signal: controller.signal,
       });
-      const data = await res.json();
+      clearTimeout(timeout);
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Invalid server response');
+      }
       if (!res.ok) throw new Error(data.error || data.message || 'Evaluation failed');
       setResults(data);
       setTimeout(() => {
@@ -172,71 +185,89 @@ export default function App() {
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      if (err.name === 'AbortError') {
+        setError('Request timed out. Please try again.');
+      } else {
+        setError(err.message || 'Something went wrong.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const overall  = results?.bandScores?.overall;
+  const overall = typeof results?.bandScores?.overall === 'number' ? results.bandScores.overall : null;
   const criteria = task === 'task1' ? CRITERIA_TASK1 : CRITERIA_TASK2;
-
-  const feedbackEntries = useMemo(() => {
-    if (!results?.feedback) return [];
-    if (typeof results.feedback === 'string') {
-      return [['overall', results.feedback]];
-    }
-    if (typeof results.feedback === 'object' && !Array.isArray(results.feedback)) {
-      return Object.entries(results.feedback).filter(([, text]) => text && String(text).trim().length > 0);
-    }
-    if (Array.isArray(results.feedback)) {
-      return results.feedback.map((f, i) => [String(i), String(f)]);
-    }
-    return [];
-  }, [results]);
+  const feedbackEntries = normalizeFeedback(results?.feedback);
 
   return (
-    <div className="bc-app">
+    <div className="bc-root" data-theme={theme}>
       <header className="bc-header">
-        {/* ── Logo ── */}
-        <div className="bc-logo">
-          <LogoMark size={40} />
-          <div>
-            <div className="bc-logo-name">BandCheck</div>
-            <div className="bc-logo-sub">IELTS Writing Evaluator</div>
+        <div className="bc-header-inner">
+          <div className="bc-brand">
+            <div className="bc-logo">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+              </svg>
+            </div>
+            <div className="bc-brand-text">
+              <div className="bc-brand-title">BandCheck</div>
+              <div className="bc-brand-sub">IELTS Writing Evaluator</div>
+            </div>
           </div>
-        </div>
 
-        {/* ── Dark-mode toggle ── */}
-        <button
-          className="bc-theme-toggle"
-          onClick={() => {
-            setTheme(t => {
-              const next = t === 'light' ? 'dark' : 'light';
-              try { localStorage.setItem('bandcheck-theme', next); } catch (_) {}
-              return next;
-            });
-          }}
-          aria-label="Toggle dark mode"
-        >
-          {theme === 'light' ? '🌙' : '☀️'}
-        </button>
+          <button
+            className="bc-theme-toggle"
+            onClick={() => {
+              setTheme((t) => {
+                const next = t === 'light' ? 'dark' : 'light';
+                try { localStorage.setItem('bandcheck-theme', next); } catch (_) {}
+                return next;
+              });
+            }}
+            aria-label="Toggle dark mode"
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
+        </div>
       </header>
 
       <main className="bc-main">
         <div className="bc-hero">
-          <h1 className="bc-hero-title">IELTS Writing Essay Checker</h1>
-          <p className="bc-hero-author">AUTHOR &mdash; <strong>NAKIB MAHMUD TANIM</strong></p>
-          <p className="bc-hero-sub">Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.</p>
+          <h1>IELTS Writing Essay Checker</h1>
+          <p>Get an instant band score and AI-powered feedback for IELTS Writing Task 1 and Task 2.</p>
         </div>
 
-        <form className="bc-form" onSubmit={handleEvaluate}>
-          <div className="bc-task-tabs">
-            <button type="button" className={`bc-task-tab${task === 'task2' ? ' active' : ''}`} onClick={() => setTask('task2')}>Task 2 (Essay)</button>
-            <button type="button" className={`bc-task-tab${task === 'task1' ? ' active' : ''}`} onClick={() => setTask('task1')}>Task 1 (Report)</button>
+        <div className="bc-card">
+          <div className="bc-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={task === 'task2'}
+              className={`bc-tab${task === 'task2' ? ' active' : ''}`}
+              onClick={() => {
+                setTask('task2');
+                setResults(null);
+                setError(null);
+              }}
+            >
+              <span className="bc-tab-title">{TASK_COPY.task2.tabTitle}</span>
+              <span className="bc-tab-sub">{TASK_COPY.task2.tabSub}</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={task === 'task1'}
+              className={`bc-tab${task === 'task1' ? ' active' : ''}`}
+              onClick={() => {
+                setTask('task1');
+                setResults(null);
+                setError(null);
+              }}
+            >
+              <span className="bc-tab-title">{TASK_COPY.task1.tabTitle}</span>
+              <span className="bc-tab-sub">{TASK_COPY.task1.tabSub}</span>
+            </button>
           </div>
 
-          <div className="bc-field">
+          <form className="bc-form" onSubmit={handleEvaluate}>
             <label className="bc-label" htmlFor="topic">{copy.topicLabel}</label>
             <input
               id="topic"
@@ -246,12 +277,15 @@ export default function App() {
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
             />
-          </div>
 
-          <div className="bc-field">
-            <label className="bc-label" htmlFor="essay">
-              Your Essay &nbsp;<span className="bc-wc">{wordCount} words</span>&nbsp;/ min {copy.minWords}
-            </label>
+            <div className="bc-essay-head">
+              <label className="bc-label" htmlFor="essay" style={{ margin: 0 }}>Your Essay</label>
+              <span className={`bc-wordcount${wordOk ? ' ok' : ''}`}>
+                <span className="bc-wordcount-dot" />
+                {wordCount} words <span className="bc-wordcount-hint">/ min {copy.minWords}</span>
+              </span>
+            </div>
+
             <textarea
               id="essay"
               className="bc-textarea"
@@ -260,48 +294,62 @@ export default function App() {
               placeholder={copy.essayPlaceholder}
               rows={16}
             />
-          </div>
 
-          <button type="submit" className="bc-submit" disabled={loading}>
-            {loading ? (<><span className="bc-spinner" /> Evaluating&hellip;</>) : ('Evaluate Essay')}
-          </button>
-          {error && <div className="bc-error">{error}</div>}
-        </form>
+            <button type="submit" className="bc-submit" disabled={loading}>
+              {loading ? (
+                <><span className="bc-spinner" /> Evaluating&hellip;</>
+              ) : (
+                'Evaluate Essay'
+              )}
+            </button>
+
+            {error && <div className="bc-error">{error}</div>}
+          </form>
+        </div>
 
         {results && (
           <section id="results" className="bc-results">
             <h2 className="bc-results-title">Your Band Score</h2>
-            <div className="bc-overall">
-              <div className="bc-overall-label">Overall Band Score</div>
-              <div className="bc-overall-value">
-                {overall != null ? overall.toFixed(1) : '\u2014'}
+
+            <div className="bc-overall-card">
+              <div>
+                <div className="bc-overall-label">Overall Band Score</div>
+                <div className="bc-overall-sub">Calculated from the four criteria</div>
               </div>
-              <div className="bc-overall-sub">out of 9.0</div>
+              <div className="bc-overall-value">{overall != null ? overall.toFixed(1) : '—'}</div>
             </div>
 
             <div className="bc-crit-grid">
-              {criteria.map(c => (
-                <CriterionCard key={c.key} crit={c} value={results.bandScores?.[c.key] ?? null} />
-              ))}
+              {criteria.map((c) => {
+                const safeValue =
+                  results?.bandScores?.[c.key] ??
+                  results?.bandScores?.taskAchievement ??
+                  results?.bandScores?.taskResponse;
+                return (
+                  <CriterionCard
+                    key={`${task}-${c.key}-${c.label}`}
+                    crit={c}
+                    value={safeValue}
+                  />
+                );
+              })}
             </div>
 
             {feedbackEntries.length > 0 && (
               <div className="bc-feedback">
                 <h3>AI Feedback</h3>
-                <ul>
-                  {feedbackEntries.map(([key, text]) => (
-                    <li key={key}>
-                      <strong>{FEEDBACK_LABELS[key] || key}:</strong>{' '}
-                      {typeof text === 'string' ? text : JSON.stringify(text)}
-                    </li>
-                  ))}
-                </ul>
+                {feedbackEntries.map(([key, text]) => (
+                  <div className="bc-feedback-item" key={key}>
+                    <div className="bc-feedback-label">{getFeedbackLabel(key, task)}</div>
+                    <p>{typeof text === 'string' ? text : JSON.stringify(text)}</p>
+                  </div>
+                ))}
               </div>
             )}
 
             <div className="bc-stats">
               <div className="bc-stat">
-                <div className="bc-stat-value">{results.counts?.words     ?? wordCount}</div>
+                <div className="bc-stat-value">{results.counts?.words ?? wordCount}</div>
                 <div className="bc-stat-label">Words</div>
               </div>
               <div className="bc-stat">
@@ -314,11 +362,13 @@ export default function App() {
               </div>
             </div>
 
-            {results.warnings && (
+            {Object.keys(results.warnings || {}).length > 0 && (
               <div className="bc-warnings">
-                <strong>Note:</strong> Some services returned partial results.
+                <strong>Note:</strong> Some AI services returned partial results.
                 <ul>
-                  {Object.entries(results.warnings).map(([k, v]) => <li key={k}>{k}: {v}</li>)}
+                  {Object.entries(results.warnings).map(([k, v]) => (
+                    <li key={k}>{k}: {v}</li>
+                  ))}
                 </ul>
               </div>
             )}
