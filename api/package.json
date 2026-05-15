@@ -1,13 +1,13 @@
 {
   "name": "ielts-writing-evaluator-api",
   "version": "4.0.0",
-  "description": "BandCheck IELTS Writing Evaluation API — Hugging Face zero-shot scoring with FacebookAI/roberta-large-mnli",
+  "description": "BandCheck IELTS Writing Evaluation API —  IELTS Writing Evaluator powered by IELTS scoring AI models llama-3.3-70b-versatile",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"
   },
-  "keywords": ["ielts", "writing", "evaluation", "scoring", "essay", "huggingface", "api"],
+  "keywords": ["ielts", "writing", "evaluation", "scoring", "essay", "llama-3.3-70b-versatile", "api"],
   "author": "Nakib Mahmud Tanim",
   "license": "MIT",
   "dependencies": {
